@@ -1,4 +1,5 @@
 import { Stethoscope, FileSearch, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { formatCitation } from "@/lib/formatCitation";
 
 const clinicianFindings = [
   {
@@ -183,7 +184,7 @@ export function DualAgentView({ clinicianView, payerView }: DualAgentViewProps) 
                           letterSpacing: "0.03em",
                         }}
                       >
-                        {p.citation}
+                        {formatCitation(p.citation)}
                       </span>
                       <p className="text-slate-700" style={{ fontSize: "0.78rem", fontWeight: 600 }}>
                         {p.title}

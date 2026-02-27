@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import {
   CheckCircle2,
@@ -13,6 +13,9 @@ import { DualAgentView } from "@/components/DualAgentView";
 import { RecommendationsList } from "@/components/RecommendationsList";
 import { ValidationIssues } from "@/components/ValidationIssues";
 import type { ComplianceCheckResponse } from "@/types/compliance";
+import { formatCitation } from "@/lib/formatCitation";
+import html2canvas from "html2canvas-pro";
+import { jsPDF } from "jspdf";
 
 const MOCK_SCORE = 74;
 const MOCK_SCORE_EXPLANATION =
@@ -38,6 +41,7 @@ function fadeUp(delay: number = 0) {
 
 export function ResultsPanel({ result = null, onReset }: ResultsPanelProps) {
   const topRef = useRef<HTMLDivElement>(null);
+  const [pdfExporting, setPdfExporting] = useState(false);
   const score = result?.score ?? MOCK_SCORE;
   const scoreExplanation = result?.scoreExplanation ?? MOCK_SCORE_EXPLANATION;
 
@@ -45,8 +49,49 @@ export function ResultsPanel({ result = null, onReset }: ResultsPanelProps) {
     topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
-  const handleExportPdf = () => {
-    window.print();
+  const handleExportPdf = async () => {
+    const el = topRef.current;
+    if (!el) return;
+    setPdfExporting(true);
+    try {
+      const canvas = await html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      });
+      const imgData = canvas.toDataURL("image/png");
+      const doc = new jsPDF({
+        orientation: canvas.width > canvas.height ? "landscape" : "portrait",
+        unit: "mm",
+        format: "a4",
+      });
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+      const pxToMm = 25.4 / 96;
+      const w = canvas.width * pxToMm;
+      const h = canvas.height * pxToMm;
+      // Prefer full width while keeping aspect ratio; if too tall, fit to page
+      const scaleForFullWidth = pageW / w;
+      const hAtFullWidth = h * scaleForFullWidth;
+      let wFinal: number;
+      let hFinal: number;
+      if (hAtFullWidth <= pageH) {
+        wFinal = pageW;
+        hFinal = hAtFullWidth;
+      } else {
+        const scale = Math.min(pageW / w, pageH / h);
+        wFinal = w * scale;
+        hFinal = h * scale;
+      }
+      const x = (pageW - wFinal) / 2;
+      const y = (pageH - hFinal) / 2;
+      doc.addImage(imgData, "PNG", x, y, wFinal, hFinal);
+      doc.save("compliance-report.pdf");
+    } catch (err) {
+      console.error("PDF export failed:", err);
+    } finally {
+      setPdfExporting(false);
+    }
   };
 
   return (
@@ -74,11 +119,12 @@ export function ResultsPanel({ result = null, onReset }: ResultsPanelProps) {
           <button
             type="button"
             onClick={handleExportPdf}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
+            disabled={pdfExporting}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             style={{ fontSize: "0.78rem" }}
           >
             <Download className="w-3.5 h-3.5" />
-            Export PDF
+            {pdfExporting ? "Generating PDF…" : "Export PDF"}
           </button>
           <button
             type="button"
@@ -102,7 +148,7 @@ export function ResultsPanel({ result = null, onReset }: ResultsPanelProps) {
               Denial Risk Score
             </span>
           </div>
-          <div className="px-6 pt-4 pb-6 flex flex-col items-center">
+          <div className="px-6 pt-6 pb-8 flex flex-col items-center">
             <ScoreGauge score={score} animated={true} />
             <div
               className="mt-5 w-full rounded-lg px-4 py-3 text-center"
@@ -116,7 +162,7 @@ export function ResultsPanel({ result = null, onReset }: ResultsPanelProps) {
                 style={{ fontSize: "0.82rem", lineHeight: 1.55 }}
               >
                 <span style={{ fontWeight: 600 }}>Key finding: </span>
-                {scoreExplanation}
+                {formatCitation(scoreExplanation)}
               </p>
             </div>
             <div className="mt-4 w-full grid grid-cols-3 gap-2 text-center">
