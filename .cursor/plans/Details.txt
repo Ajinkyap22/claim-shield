@@ -1,0 +1,36 @@
+Track: 
+
+The Healthcare Claim Shield (Healthcare)
+
+Autonomous Healthcare Compliance & Revenue Assurance
+
+
+The Mission:
+The healthcare system loses billions to claim denials caused by simple documentation errors. Your task is to build a 'Compliance Shield' — an agent that acts as a firewall between the doctor and the insurer.
+
+
+Operational Blueprint:
+A sophisticated orchestrator that processes raw doctor dictations (audio/text) and standardizes them into valid HL7/FHIR formats. The agent must cross-reference these notes against a medical Data Set and, crucially, read complex Insurance Policy PDFs to verify coverage before a claim is ever submitted.  
+
+Judging Criteria / Scoring Breakdown
+
+35%
+Innovation & Creativity
+Originality of the idea, creative use of technology, and uniqueness of the approach to solving the problem.
+
+25%
+Technical Implementation
+Code quality, architecture decisions, use of best practices, and overall technical execution of the solution.
+
+20%
+Impact & Practicality
+Real-world applicability, potential business or social impact, and feasibility of scaling the solution.
+
+10%
+Design & User Experience
+Visual design quality, intuitiveness of the interface, and overall user experience considerations.
+
+10%
+Presentation & Demo
+Clarity of the pitch, quality of the live demonstration, and ability to communicate the value proposition.
+
