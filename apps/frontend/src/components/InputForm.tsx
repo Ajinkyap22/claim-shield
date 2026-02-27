@@ -11,6 +11,8 @@ import {
   AudioLines,
   ImagePlus,
   ChevronDown,
+  Play,
+  Pause,
 } from "lucide-react";
 import type { ComplianceCheckPayload } from "@/types/compliance";
 
@@ -89,11 +91,62 @@ const MOCK_TRANSCRIPT =
 
 const DOC_IMAGE_ACCEPT = ".pdf,.doc,.docx,image/*";
 
+/** Seed heights for waveform bars; repeated to fill width. */
+const WAVEFORM_SEED = [40, 65, 35, 90, 85, 70, 30, 90, 10, 20, 38, 75, 42, 85, 48];
+const BAR_WIDTH_PX = 4;
+const MIN_BARS = 24;
+const MAX_BARS = 280;
+
+function AudioWaveform({ isPlaying }: { isPlaying: boolean }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [barCount, setBarCount] = useState(MIN_BARS);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const updateCount = () => {
+      const w = el.offsetWidth;
+      const count = Math.min(MAX_BARS, Math.max(MIN_BARS, Math.floor(w / BAR_WIDTH_PX)));
+      setBarCount(count);
+    };
+    updateCount();
+    const ro = new ResizeObserver(updateCount);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const heights = Array.from(
+    { length: barCount },
+    (_, i) => WAVEFORM_SEED[i % WAVEFORM_SEED.length]
+  );
+
+  return (
+    <div
+      ref={containerRef}
+      className="flex items-end gap-0.5 h-8 w-full min-w-0 flex-1"
+      aria-hidden
+    >
+      {heights.map((h, i) => (
+        <div
+          key={i}
+          className="flex-1 min-w-[2px] rounded-full transition-all duration-150"
+          style={{
+            height: `${h}%`,
+            maxHeight: "100%",
+            backgroundColor: isPlaying ? "#0d9488" : "#14b8a6",
+            opacity: isPlaying ? 1 : 0.8,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function InputForm({ onSubmit, loading }: InputFormProps) {
   const [note, setNote] = useState("");
   const [audioStatus, setAudioStatus] = useState<AudioStatus>("idle");
   const [recordingSeconds, setRecordingSeconds] = useState(0);
-  const [audioFileName, setAudioFileName] = useState("");
+  const [audioFiles, setAudioFiles] = useState<File[]>([]);
   const [policyFiles, setPolicyFiles] = useState<File[]>([]);
   const [docImageFiles, setDocImageFiles] = useState<File[]>([]);
   const [sampleDropdownOpen, setSampleDropdownOpen] = useState(false);
@@ -101,54 +154,125 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
   const audioFileRef = useRef<HTMLInputElement>(null);
   const policyFileRef = useRef<HTMLInputElement>(null);
   const docImageFileRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const [playingIndex, setPlayingIndex] = useState<number | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
     };
   }, []);
 
-  const startRecording = () => {
-    setAudioStatus("recording");
-    setRecordingSeconds(0);
-    timerRef.current = setInterval(() => {
-      setRecordingSeconds((s) => s + 1);
-    }, 1000);
+  const playAudio = (index: number) => {
+    if (playingIndex === index) {
+      audioRef.current?.pause();
+      setPlayingIndex(null);
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current);
+        audioUrlRef.current = null;
+      }
+      return;
+    }
+    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+    const file = audioFiles[index];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    audioUrlRef.current = url;
+    const audio = audioRef.current || new Audio();
+    audioRef.current = audio;
+    audio.src = url;
+    audio.onended = () => {
+      setPlayingIndex(null);
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current);
+        audioUrlRef.current = null;
+      }
+    };
+    audio.play().catch(() => setPlayingIndex(null));
+    setPlayingIndex(index);
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      recordingChunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (e) => {
+        if (e.data.size) recordingChunksRef.current.push(e.data);
+      };
+      recorder.start();
+      setAudioStatus("recording");
+      setRecordingSeconds(0);
+      timerRef.current = setInterval(() => {
+        setRecordingSeconds((s) => s + 1);
+      }, 1000);
+    } catch {
+      setAudioStatus("idle");
+      setNote((prev) =>
+        prev
+          ? prev + "\n\n[Sample note for demo]\n" + MOCK_TRANSCRIPT
+          : MOCK_TRANSCRIPT,
+      );
+    }
   };
 
   const stopRecording = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     setAudioStatus("transcribing");
-    setTimeout(() => {
+    const recorder = mediaRecorderRef.current;
+    const stream = mediaStreamRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.onstop = () => {
+        const chunks = recordingChunksRef.current.filter((b) => b.size > 0);
+        const blob = new Blob(chunks, {
+          type: recorder.mimeType || "audio/webm",
+        });
+        const file = new File([blob], "recording.webm", {
+          type: recorder.mimeType || "audio/webm",
+        });
+        setAudioFiles((prev) => [...prev, file]);
+        setAudioStatus("transcribed");
+        stream?.getTracks().forEach((t) => t.stop());
+      };
+      recorder.stop();
+    } else {
       setAudioStatus("transcribed");
       setNote((prev) =>
         prev
-          ? prev + "\n\n[Voice transcription]\n" + MOCK_TRANSCRIPT
-          : MOCK_TRANSCRIPT
+          ? prev + "\n\n[Sample note for demo]\n" + MOCK_TRANSCRIPT
+          : MOCK_TRANSCRIPT,
       );
-    }, 2200);
+    }
   };
 
   const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setAudioFileName(file.name);
-    setAudioStatus("transcribing");
-    setTimeout(() => {
-      setAudioStatus("transcribed");
-      setNote((prev) =>
-        prev
-          ? prev + "\n\n[Audio transcription]\n" + MOCK_TRANSCRIPT
-          : MOCK_TRANSCRIPT
-      );
-    }, 2500);
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    if (!files.length) return;
+    setAudioFiles((prev) => [...prev, ...files]);
+    setAudioStatus("transcribed");
+    if (audioFileRef.current) audioFileRef.current.value = "";
   };
 
   const resetAudio = () => {
+    audioRef.current?.pause();
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+    setPlayingIndex(null);
     setAudioStatus("idle");
-    setAudioFileName("");
     setRecordingSeconds(0);
+    setAudioFiles([]);
     if (audioFileRef.current) audioFileRef.current.value = "";
+    mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
   };
 
   const handlePolicyUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -180,7 +304,8 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
     setDocImageFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const canSubmit = note.trim().length > 20 && !loading;
+  const canSubmit =
+    (note.trim().length > 20 || audioFiles.length > 0) && !loading;
 
   const formatTime = (s: number) =>
     `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
@@ -192,10 +317,15 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
         <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50">
           <div className="flex items-center gap-2">
             <FileText className="w-4 h-4 text-slate-500" />
-            <span className="text-slate-700" style={{ fontSize: "0.875rem", fontWeight: 600 }}>
+            <span
+              className="text-slate-700"
+              style={{ fontSize: "0.875rem", fontWeight: 600 }}
+            >
               Claim documentation
             </span>
-            <span className="text-red-500" style={{ fontSize: "0.75rem" }}>*</span>
+            <span className="text-red-500" style={{ fontSize: "0.75rem" }}>
+              *
+            </span>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <div className="relative">
@@ -257,11 +387,18 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
         {docImageFiles.length > 0 && (
           <div className="px-5 py-2 border-b border-slate-100 bg-slate-50 space-y-1">
             <span className="text-slate-500" style={{ fontSize: "0.72rem" }}>
-              Documentation ({docImageFiles.length} file{docImageFiles.length !== 1 ? "s" : ""})
+              Documentation ({docImageFiles.length} file
+              {docImageFiles.length !== 1 ? "s" : ""})
             </span>
             {docImageFiles.map((file, i) => (
-              <div key={`${file.name}-${i}`} className="flex items-center justify-between gap-2">
-                <span className="text-slate-600 truncate" style={{ fontSize: "0.78rem" }}>
+              <div
+                key={`${file.name}-${i}`}
+                className="flex items-center justify-between gap-2"
+              >
+                <span
+                  className="text-slate-600 truncate"
+                  style={{ fontSize: "0.78rem" }}
+                >
                   {file.name}
                 </span>
                 <button
@@ -306,10 +443,15 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
           <div className="flex items-center gap-2 mb-3">
             <AudioLines className="w-4 h-4 text-slate-500" />
-            <span className="text-slate-700" style={{ fontSize: "0.875rem", fontWeight: 600 }}>
+            <span
+              className="text-slate-700"
+              style={{ fontSize: "0.875rem", fontWeight: 600 }}
+            >
               Audio documentation
             </span>
-            <span className="text-slate-400" style={{ fontSize: "0.72rem" }}>(optional)</span>
+            <span className="text-slate-400" style={{ fontSize: "0.72rem" }}>
+              (optional)
+            </span>
           </div>
 
           {audioStatus === "idle" && (
@@ -336,6 +478,7 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
                 ref={audioFileRef}
                 type="file"
                 accept="audio/*"
+                multiple
                 className="hidden"
                 onChange={handleAudioUpload}
               />
@@ -346,7 +489,10 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
-                <span className="text-red-600" style={{ fontSize: "0.8rem", fontWeight: 600 }}>
+                <span
+                  className="text-red-600"
+                  style={{ fontSize: "0.8rem", fontWeight: 600 }}
+                >
                   Recording {formatTime(recordingSeconds)}
                 </span>
               </div>
@@ -364,33 +510,66 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
           {audioStatus === "transcribing" && (
             <div className="flex items-center gap-2 text-teal-600">
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span style={{ fontSize: "0.8rem", fontWeight: 500 }}>Transcribing audio…</span>
+              <span style={{ fontSize: "0.8rem", fontWeight: 500 }}>
+                Transcribing audio…
+              </span>
             </div>
           )}
 
-          {(audioStatus === "transcribed" || audioStatus === "uploaded") && (
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-teal-500"></span>
-                <span className="text-teal-700" style={{ fontSize: "0.8rem", fontWeight: 500 }}>
-                  {audioFileName ? audioFileName : "Recording"} merged into documentation
-                </span>
+          {(audioStatus === "transcribed" || audioStatus === "uploaded") &&
+            audioFiles.length > 0 && (
+              <div className="space-y-2">
+                {audioFiles.map((file, i) => (
+                  <div
+                    key={`${file.name}-${i}`}
+                    className="flex items-center gap-3 p-2.5 rounded-lg bg-teal-50 border border-teal-100"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => playAudio(i)}
+                      className="flex items-center justify-center w-9 h-9 rounded-full bg-teal-500 text-white hover:bg-teal-600 transition-colors shrink-0"
+                      aria-label={playingIndex === i ? "Pause" : "Play"}
+                    >
+                      {playingIndex === i ? (
+                        <Pause className="w-4 h-4 fill-current" />
+                      ) : (
+                        <Play className="w-4 h-4 fill-current ml-0.5" />
+                      )}
+                    </button>
+                    <div className="flex-1 min-w-0 flex items-center w-full">
+                      <AudioWaveform isPlaying={playingIndex === i} />
+                    </div>
+                  </div>
+                ))}
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={resetAudio}
+                    className="text-slate-400 hover:text-slate-600 transition-colors flex items-center gap-1"
+                    style={{ fontSize: "0.75rem" }}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    Remove all audio
+                  </button>
+                </div>
               </div>
-              <button onClick={resetAudio} className="text-slate-400 hover:text-slate-600 transition-colors">
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
+            )}
+          <audio ref={audioRef} className="hidden" />
         </div>
 
         {/* Policy PDF */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
           <div className="flex items-center gap-2 mb-3">
             <Paperclip className="w-4 h-4 text-slate-500" />
-            <span className="text-slate-700" style={{ fontSize: "0.875rem", fontWeight: 600 }}>
+            <span
+              className="text-slate-700"
+              style={{ fontSize: "0.875rem", fontWeight: 600 }}
+            >
               Payer Policy
             </span>
-            <span className="text-slate-400" style={{ fontSize: "0.72rem" }}>(PDF)</span>
+            <span className="text-slate-400" style={{ fontSize: "0.72rem" }}>
+              (PDF)
+            </span>
           </div>
 
           <button
@@ -456,6 +635,7 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
           onClick={() =>
             onSubmit({
               clinicalNote: note,
+              audioFiles: [...audioFiles],
               policyFiles: [...policyFiles],
               documentationFiles: [...docImageFiles],
             })
@@ -484,9 +664,9 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
             </>
           )}
         </button>
-        {!note.trim() && (
+        {note.trim().length <= 20 && !audioFiles.length && (
           <p className="text-slate-400" style={{ fontSize: "0.75rem" }}>
-            Add claim documentation to continue
+            Add claim documentation or attach audio to continue
           </p>
         )}
         {note.trim() && !loading && (

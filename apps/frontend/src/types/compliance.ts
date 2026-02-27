@@ -5,15 +5,18 @@
  * Example FormData integration:
  *   const fd = new FormData();
  *   fd.append("clinicalNote", payload.clinicalNote);
+ *   payload.audioFiles.forEach((f) => fd.append("audio", f));  // backend runs Whisper on these
  *   payload.policyFiles.forEach((f) => fd.append("policy", f));
  *   payload.documentationFiles.forEach((f) => fd.append("documentation", f));
  *   await fetch("/api/v1/claim-check", { method: "POST", body: fd });
  */
 export interface ComplianceCheckPayload {
-  /** Clinical note text (from textarea and/or transcribed audio). */
+  /** Clinical note text (from textarea). If audio is sent, backend transcribes via Whisper and merges. */
   clinicalNote: string;
+  /** Optional audio file(s) from record or upload. Backend runs Whisper to produce transcript. */
+  audioFiles: File[];
   /** Policy PDFs uploaded by the user. Send as multipart "policy" or "policy[]". */
-  policyFiles: File[];
+  policyFiles: File [];
   /** Optional documentation files (PDF, DOC, images). Send as multipart "documentation" or "documentation[]". */
   documentationFiles: File[];
 }
