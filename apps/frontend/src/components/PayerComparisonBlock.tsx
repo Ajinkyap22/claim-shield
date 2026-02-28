@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion } from "motion/react";
 import { Building2, BarChart3, Loader2, Info } from "lucide-react";
 import { getScoreConfig } from "@/components/ScoreGauge";
 import type { PayerComparisonItem } from "@/types/compliance";

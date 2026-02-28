@@ -428,6 +428,7 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
                         key={ds.id}
                         type="button"
                         role="option"
+                        aria-selected="false"
                         onClick={() => loadSample(ds.content)}
                         className="w-full text-left px-3 py-2 text-slate-700 hover:bg-teal-50 text-sm"
                       >
