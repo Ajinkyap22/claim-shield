@@ -3,7 +3,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  outputFileTracingRoot: path.join(__dirname, "../.."),
+  ...(process.env.DOCKER_BUILD
+    ? {}
+    : { outputFileTracingRoot: path.join(__dirname, "../..") }),
 };
 
 export default nextConfig;

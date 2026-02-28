@@ -1,14 +1,15 @@
 FROM node:20-slim
 
-WORKDIR /app
+WORKDIR /workspace
 
-COPY apps/shared-ts/ /app/shared-ts/
-RUN cd /app/shared-ts && npm install && npm run build
+COPY apps/shared-ts/ /workspace/shared-ts/
+RUN cd /workspace/shared-ts && npm install && npm run build
 
-COPY apps/gateway/package.json apps/gateway/tsconfig.json /app/
+WORKDIR /workspace/gateway
+COPY apps/gateway/package.json apps/gateway/tsconfig.json ./
 RUN npm install
 
-COPY apps/gateway/ /app/
+COPY apps/gateway/ ./
 RUN npm run build
 
 CMD ["node", "dist/index.js"]

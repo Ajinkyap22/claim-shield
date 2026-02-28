@@ -14,7 +14,7 @@ router.post("/ingest", upload.single("file"), async (req, res) => {
     const form = new FormData();
 
     if (req.file) {
-      const blob = new Blob([req.file.buffer], { type: req.file.mimetype });
+      const blob = new Blob([new Uint8Array(req.file.buffer)], { type: req.file.mimetype });
       form.append("file", blob, req.file.originalname);
     }
 

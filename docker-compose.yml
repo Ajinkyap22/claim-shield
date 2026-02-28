@@ -19,46 +19,49 @@ services:
       SCORING_SERVICE_URL: http://scoring-service:8004
       POLICY_SERVICE_URL: http://policy-service:8005
 
-  extraction-service:
-    build:
-      context: .
-      dockerfile: apps/extraction-service/Dockerfile
-    ports:
-      - "8001:8001"
-    env_file: .env
-
   mapping-service:
-    build:
-      context: .
-      dockerfile: apps/mapping-service/Dockerfile
+    image: python:3.11-slim
+    working_dir: /app
+    command: sh -c "pip install --no-cache-dir -r requirements.txt && uvicorn api:app --host 0.0.0.0 --port 8000"
+    volumes:
+      - ./apps/data-extraction-pipe:/app
     ports:
-      - "8002:8002"
-    env_file: .env
+      - "8002:8000"
+    env_file:
+      - apps/data-extraction-pipe/.env
 
   validation-service:
-    build:
-      context: .
-      dockerfile: apps/validation-service/Dockerfile
+    image: node:20-slim
+    working_dir: /app/apps/validation-service
+    command: sh -c "npm install --prefix /app/apps/shared-ts && npm run --prefix /app/apps/shared-ts build && npm install && npm run dev"
+    volumes:
+      - .:/app
     ports:
       - "8003:8003"
-    env_file: .env
+    env_file:
+      - apps/validation-service/.env
 
   scoring-service:
-    build:
-      context: .
-      dockerfile: apps/scoring-service/Dockerfile
+    image: node:20-slim
+    working_dir: /app/apps/scoring-service
+    command: sh -c "npm install --prefix /app/apps/shared-ts && npm run --prefix /app/apps/shared-ts build && npm install && npm run dev"
+    volumes:
+      - .:/app
     ports:
       - "8004:8004"
-    env_file: .env
+    env_file:
+      - apps/scoring-service/.env
     depends_on:
       - policy-service
     environment:
       POLICY_SERVICE_URL: http://policy-service:8005
 
   policy-service:
-    build:
-      context: .
-      dockerfile: apps/policy-service/Dockerfile
+    image: node:20-slim
+    working_dir: /app/apps/policy-service
+    command: sh -c "npm install --prefix /app/apps/shared-ts && npm run --prefix /app/apps/shared-ts build && npm install && npm run dev"
+    volumes:
+      - .:/app
     ports:
       - "8005:8005"
     env_file: .env
