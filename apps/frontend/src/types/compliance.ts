@@ -56,6 +56,22 @@ export interface ComplianceCheckResponse {
   }>;
   /** Optional: analysis duration or policy name for display. */
   meta?: { analyzedInMs?: number; policyName?: string };
+  /** Optional: how the same claim would fare vs major US payers (informational). */
+  payerComparison?: PayerComparisonItem[];
+}
+
+/**
+ * One row for the "How your claim stands vs top US payers" block.
+ * Risk/readiness can be a score band or a label (e.g. "Likely OK" / "Review needed").
+ */
+export interface PayerComparisonItem {
+  payerName: string;
+  /** 0–100 denial risk for this payer (optional; if absent use statusLabel). */
+  score?: number;
+  /** Display label when score is not used, e.g. "Likely OK" | "Review needed". */
+  statusLabel?: string;
+  /** Optional short note (e.g. "Stricter prior auth rules"). */
+  note?: string;
 }
 
 /**

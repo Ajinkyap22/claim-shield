@@ -87,6 +87,13 @@ This is the main “takeaway” for the demo and for clients.
 
 - If the backend returns validation issues (e.g. invalid ICD-10, missing codes), show a small **“Validation issues”** block: bullet list of issues. Not the main hero, but visible so the “medical dataset check” is clear.
 
+### 4.6 How your claim stands vs top US payers (optional / extension)
+
+- **Purpose:** Extra context on the results page: show how the same claim would fare against **major US healthcare payers** (e.g. UnitedHealthcare, Aetna, Cigna, Humana, Anthem/Elevance) in addition to the user’s uploaded policy.
+- **Content:** A compact block (card or small table): payer name, implied or estimated “risk” or “readiness” (e.g. score band or “Likely OK” / “Review needed”) per payer. Data can come from backend (e.g. comparing claim against known payer policy patterns or reference rules).
+- **Placement:** Below the main score and recommendations, or in a collapsible “Compare with other payers.” Clearly labeled as **informational** (e.g. “How this claim might fare with other major payers”) so it doesn’t overshadow the primary result against the user’s own policy.
+- **UX:** One row or card per payer; optional tooltip or short copy on why this is useful (e.g. “Useful for multi-payer practices and contracting.”). Keep it scannable so judges see “one number for my payer + context vs others.”
+
 ---
 
 ## 5. Visual hierarchy (for Design & UX scoring)
@@ -94,6 +101,7 @@ This is the main “takeaway” for the demo and for clients.
 - **Primary:** Denial Risk Score (size, color, one-line explanation).
 - **Secondary:** Policy-cited recommendations (actionable; citations visible).
 - **Tertiary:** Clinician view, Payer view, claim summary, validation issues.
+- **Optional / extension:** “Claim vs top US payers” block (informational, below main results).
 
 Use clear headings, spacing, and one accent color (e.g. for the score and primary button) so the UI doesn’t look cluttered.
 
@@ -133,7 +141,7 @@ Keep copy short and action-oriented (“Run compliance check,” “Add prior au
 |------|---------|
 | Header | Product name; optional logo. |
 | Input | Note (text + optional audio), policy PDF upload, “Run compliance check.” |
-| Results | Denial Risk Score (0–100) + explanation; claim summary; clinician view; payer view; policy-cited recommendations; validation issues (if any). |
+| Results | Denial Risk Score (0–100) + explanation; claim summary; clinician view; payer view; policy-cited recommendations; validation issues (if any); optional “how your claim stands vs top US payers” (e.g. UHC, Aetna, Cigna). |
 | Footer (optional) | Disclaimer; “Embeddable / API” line for integrability story. |
 
 This gives you a clear picture of how the frontend looks and behaves, and doubles as a spec for building it in Next.js (or any stack the org prefers).

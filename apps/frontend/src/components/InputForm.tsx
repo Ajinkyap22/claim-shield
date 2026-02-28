@@ -32,6 +32,44 @@ interface InputFormProps {
 
 const SAMPLE_DATASETS = [
   {
+    id: "lumbar",
+    label: "Lumbar spine / back pain",
+    content: `Patient: Michael R., DOB 11/08/1975
+Date of Service: 02/25/2026
+
+Chief Complaint: Chronic low back pain with radicular symptoms into the lower extremity.
+
+History: Patient is a 50-year-old male presenting with a 6-month history of progressive low back pain. Pain began insidiously and has worsened over time, now radiating into the left leg with associated numbness and tingling. Patient reports difficulty with prolonged sitting and standing. Pain is exacerbated by forward flexion and lifting.
+
+Treatment history: Patient has undergone several weeks of physical therapy with minimal improvement. Has tried over-the-counter NSAIDs (ibuprofen 600mg TID) with partial relief. No prior injections or surgical interventions.
+
+Physical Examination:
+- General: Alert, cooperative, in mild distress
+- Lumbar spine: Decreased range of motion in flexion (limited to 60 degrees), extension limited to 15 degrees
+- Straight leg raise: Positive on the left at 45 degrees, reproducing radicular symptoms
+- Motor: 4/5 strength in left ankle dorsiflexion, otherwise 5/5 throughout
+- Sensory: Decreased sensation to light touch in L5 distribution on the left
+- Reflexes: Left Achilles reflex diminished (1+), right normal (2+)
+
+Imaging: Recent lumbar MRI (02/15/2026) shows L4-L5 and L5-S1 disc herniation with moderate central canal stenosis and left foraminal narrowing at L5-S1.
+
+Assessment:
+- M54.50: Low back pain, unspecified (primary diagnosis)
+- M51.26: Other intervertebral disc displacement, lumbar region
+- M54.16: Radiculopathy, lumbar region
+
+Plan:
+1. Continue physical therapy with focus on core strengthening and lumbar stabilization exercises (CPT 97110 - Therapeutic exercises)
+2. Manual therapy for soft tissue mobilization (CPT 97140 - Manual therapy)
+3. Consider epidural steroid injection if conservative measures fail (CPT 62323 - Injection, epidural, lumbar/sacral)
+4. Follow-up in 4 weeks to reassess symptoms and response to treatment
+5. Prescribed meloxicam 15mg daily for pain management
+
+Attending: Dr. James Martinez, MD, Physical Medicine & Rehabilitation
+Facility: Central Spine & Pain Management Center
+NPI: 9876543210`,
+  },
+  {
     id: "knee",
     label: "Knee arthroplasty (orthopedic)",
     content: `Patient: Jane D., DOB 04/15/1972
@@ -89,10 +127,12 @@ Planned: Return in 1 year for next AWV. CPT 99396 (Preventive visit, 40–64). I
 const MOCK_TRANSCRIPT =
   "Patient is a 53-year-old female with longstanding right knee osteoarthritis. Conservative treatments over the past 8 weeks have failed. Recommending right total knee arthroplasty. Prior auth has been requested verbally.";
 
-const DOC_IMAGE_ACCEPT = ".pdf,.doc,.docx,image/*";
+const DOC_IMAGE_ACCEPT = ".pdf,.doc,.docx,.txt,image/*";
 
 /** Seed heights for waveform bars; repeated to fill width. */
-const WAVEFORM_SEED = [40, 65, 35, 90, 85, 70, 30, 90, 10, 20, 38, 75, 42, 85, 48];
+const WAVEFORM_SEED = [
+  40, 65, 35, 90, 85, 70, 30, 90, 10, 20, 38, 75, 42, 85, 48,
+];
 const BAR_WIDTH_PX = 4;
 const MIN_BARS = 24;
 const MAX_BARS = 280;
@@ -106,7 +146,10 @@ function AudioWaveform({ isPlaying }: { isPlaying: boolean }) {
     if (!el) return;
     const updateCount = () => {
       const w = el.offsetWidth;
-      const count = Math.min(MAX_BARS, Math.max(MIN_BARS, Math.floor(w / BAR_WIDTH_PX)));
+      const count = Math.min(
+        MAX_BARS,
+        Math.max(MIN_BARS, Math.floor(w / BAR_WIDTH_PX)),
+      );
       setBarCount(count);
     };
     updateCount();
@@ -117,7 +160,7 @@ function AudioWaveform({ isPlaying }: { isPlaying: boolean }) {
 
   const heights = Array.from(
     { length: barCount },
-    (_, i) => WAVEFORM_SEED[i % WAVEFORM_SEED.length]
+    (_, i) => WAVEFORM_SEED[i % WAVEFORM_SEED.length],
   );
 
   return (
@@ -311,7 +354,8 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Enter" || (!e.ctrlKey && !e.metaKey)) return;
       e.preventDefault();
-      if (!((note.trim().length > 20 || audioFiles.length > 0) && !loading)) return;
+      if (!((note.trim().length > 20 || audioFiles.length > 0) && !loading))
+        return;
       onSubmit({
         clinicalNote: note,
         audioFiles: [...audioFiles],
@@ -331,7 +375,10 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
       {/* Clinical documentation */}
       <div
         className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden transition-[box-shadow] duration-300 hover:shadow-[var(--shadow-card-hover)]"
-        style={{ boxShadow: "var(--shadow-card)", borderLeft: "3px solid var(--teal-500)" }}
+        style={{
+          boxShadow: "var(--shadow-card)",
+          borderLeft: "3px solid var(--teal-500)",
+        }}
       >
         <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3.5 border-b border-slate-100 bg-slate-50/80">
           <div className="flex items-center gap-3">
@@ -345,7 +392,10 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
               >
                 Claim documentation
               </span>
-              <span className="text-red-500 ml-0.5" style={{ fontSize: "0.75rem" }}>
+              <span
+                className="text-red-500 ml-0.5"
+                style={{ fontSize: "0.75rem" }}
+              >
                 *
               </span>
             </div>
@@ -378,6 +428,7 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
                         key={ds.id}
                         type="button"
                         role="option"
+                        aria-selected="false"
                         onClick={() => loadSample(ds.content)}
                         className="w-full text-left px-3 py-2 text-slate-700 hover:bg-teal-50 text-sm"
                       >
@@ -479,113 +530,115 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
               >
                 Audio documentation
               </span>
-              <span className="text-slate-400 ml-1" style={{ fontSize: "0.72rem" }}>
+              <span
+                className="text-slate-400 ml-1"
+                style={{ fontSize: "0.72rem" }}
+              >
                 (optional)
               </span>
             </div>
           </div>
           <div className="p-4">
-
-          {audioStatus === "idle" && (
-            <div className="flex gap-2">
-              <button
-                onClick={startRecording}
-                disabled={loading}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-red-50 hover:border-red-200 text-slate-600 hover:text-red-600 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-400/20 focus:ring-offset-2 disabled:opacity-50"
-                style={{ fontSize: "0.8rem" }}
-              >
-                <Mic className="w-3.5 h-3.5" />
-                Record
-              </button>
-              <button
-                onClick={() => audioFileRef.current?.click()}
-                disabled={loading}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-slate-400/20 focus:ring-offset-2 disabled:opacity-50"
-                style={{ fontSize: "0.8rem" }}
-              >
-                <Upload className="w-3.5 h-3.5" />
-                Upload
-              </button>
-              <input
-                ref={audioFileRef}
-                type="file"
-                accept="audio/*"
-                multiple
-                className="hidden"
-                onChange={handleAudioUpload}
-              />
-            </div>
-          )}
-
-          {audioStatus === "recording" && (
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
-                <span
-                  className="text-red-600"
-                  style={{ fontSize: "0.8rem", fontWeight: 600 }}
+            {audioStatus === "idle" && (
+              <div className="flex gap-2">
+                <button
+                  onClick={startRecording}
+                  disabled={loading}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-red-50 hover:border-red-200 text-slate-600 hover:text-red-600 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-400/20 focus:ring-offset-2 disabled:opacity-50"
+                  style={{ fontSize: "0.8rem" }}
                 >
-                  Recording {formatTime(recordingSeconds)}
-                </span>
-              </div>
-              <button
-                onClick={stopRecording}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors"
-                style={{ fontSize: "0.75rem" }}
-              >
-                <Square className="w-3 h-3 fill-current" />
-                Stop
-              </button>
-            </div>
-          )}
-
-          {audioStatus === "transcribing" && (
-            <div className="flex items-center gap-2 text-teal-600">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span style={{ fontSize: "0.8rem", fontWeight: 500 }}>
-                Transcribing audio…
-              </span>
-            </div>
-          )}
-
-          {(audioStatus === "transcribed" || audioStatus === "uploaded") &&
-            audioFiles.length > 0 && (
-              <div className="space-y-2">
-                {audioFiles.map((file, i) => (
-                  <div
-                    key={`${file.name}-${i}`}
-                    className="flex items-center gap-3 p-2.5 rounded-lg bg-teal-50 border border-teal-100"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => playAudio(i)}
-                      className="flex items-center justify-center w-9 h-9 rounded-full bg-teal-500 text-white hover:bg-teal-600 transition-colors shrink-0"
-                      aria-label={playingIndex === i ? "Pause" : "Play"}
-                    >
-                      {playingIndex === i ? (
-                        <Pause className="w-4 h-4 fill-current" />
-                      ) : (
-                        <Play className="w-4 h-4 fill-current ml-0.5" />
-                      )}
-                    </button>
-                    <div className="flex-1 min-w-0 flex items-center w-full">
-                      <AudioWaveform isPlaying={playingIndex === i} />
-                    </div>
-                  </div>
-                ))}
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={resetAudio}
-                    className="text-slate-400 hover:text-slate-600 transition-colors flex items-center gap-1"
-                    style={{ fontSize: "0.75rem" }}
-                  >
-                    <X className="w-3.5 h-3.5" />
-                    Remove all audio
-                  </button>
-                </div>
+                  <Mic className="w-3.5 h-3.5" />
+                  Record
+                </button>
+                <button
+                  onClick={() => audioFileRef.current?.click()}
+                  disabled={loading}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-slate-400/20 focus:ring-offset-2 disabled:opacity-50"
+                  style={{ fontSize: "0.8rem" }}
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  Upload
+                </button>
+                <input
+                  ref={audioFileRef}
+                  type="file"
+                  accept="audio/*"
+                  multiple
+                  className="hidden"
+                  onChange={handleAudioUpload}
+                />
               </div>
             )}
+
+            {audioStatus === "recording" && (
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
+                  <span
+                    className="text-red-600"
+                    style={{ fontSize: "0.8rem", fontWeight: 600 }}
+                  >
+                    Recording {formatTime(recordingSeconds)}
+                  </span>
+                </div>
+                <button
+                  onClick={stopRecording}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors"
+                  style={{ fontSize: "0.75rem" }}
+                >
+                  <Square className="w-3 h-3 fill-current" />
+                  Stop
+                </button>
+              </div>
+            )}
+
+            {audioStatus === "transcribing" && (
+              <div className="flex items-center gap-2 text-teal-600">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span style={{ fontSize: "0.8rem", fontWeight: 500 }}>
+                  Transcribing audio…
+                </span>
+              </div>
+            )}
+
+            {(audioStatus === "transcribed" || audioStatus === "uploaded") &&
+              audioFiles.length > 0 && (
+                <div className="space-y-2">
+                  {audioFiles.map((file, i) => (
+                    <div
+                      key={`${file.name}-${i}`}
+                      className="flex items-center gap-3 p-2.5 rounded-lg bg-teal-50 border border-teal-100"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => playAudio(i)}
+                        className="flex items-center justify-center w-9 h-9 rounded-full bg-teal-500 text-white hover:bg-teal-600 transition-colors shrink-0"
+                        aria-label={playingIndex === i ? "Pause" : "Play"}
+                      >
+                        {playingIndex === i ? (
+                          <Pause className="w-4 h-4 fill-current" />
+                        ) : (
+                          <Play className="w-4 h-4 fill-current ml-0.5" />
+                        )}
+                      </button>
+                      <div className="flex-1 min-w-0 flex items-center w-full">
+                        <AudioWaveform isPlaying={playingIndex === i} />
+                      </div>
+                    </div>
+                  ))}
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={resetAudio}
+                      className="text-slate-400 hover:text-slate-600 transition-colors flex items-center gap-1"
+                      style={{ fontSize: "0.75rem" }}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      Remove all audio
+                    </button>
+                  </div>
+                </div>
+              )}
           </div>
           <audio ref={audioRef} className="hidden" />
         </div>
@@ -606,67 +659,69 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
               >
                 Payer Policy
               </span>
-              <span className="text-slate-400 ml-1" style={{ fontSize: "0.72rem" }}>
+              <span
+                className="text-slate-400 ml-1"
+                style={{ fontSize: "0.72rem" }}
+              >
                 (PDF)
               </span>
             </div>
           </div>
           <div className="p-4">
+            <button
+              onClick={() => policyFileRef.current?.click()}
+              disabled={loading}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg border-2 border-dashed border-slate-200 hover:border-teal-300 text-slate-500 hover:text-teal-600 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 w-full justify-center focus:outline-none focus:ring-2 focus:ring-teal-500/25 focus:ring-offset-2 disabled:opacity-50"
+              style={{ fontSize: "0.8rem" }}
+            >
+              <Upload className="w-3.5 h-3.5" />
+              Upload policy PDF{policyFiles.length > 0 ? " (add more)" : ""}
+            </button>
 
-          <button
-            onClick={() => policyFileRef.current?.click()}
-            disabled={loading}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg border-2 border-dashed border-slate-200 hover:border-teal-300 text-slate-500 hover:text-teal-600 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 w-full justify-center focus:outline-none focus:ring-2 focus:ring-teal-500/25 focus:ring-offset-2 disabled:opacity-50"
-            style={{ fontSize: "0.8rem" }}
-          >
-            <Upload className="w-3.5 h-3.5" />
-            Upload policy PDF{policyFiles.length > 0 ? " (add more)" : ""}
-          </button>
-
-          {policyFiles.length > 0 && (
-            <ul className="mt-2 space-y-1.5">
-              {policyFiles.map((file, i) => (
-                <li
-                  key={`${file.name}-${i}`}
-                  className="flex items-center justify-between p-2 rounded-lg bg-teal-50 border border-teal-100"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <FileText className="w-4 h-4 text-teal-600 shrink-0" />
-                    <span
-                      className="text-teal-700 truncate"
-                      style={{ fontSize: "0.78rem", fontWeight: 500 }}
-                      title={file.name}
-                    >
-                      {file.name}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => removePolicyFile(i)}
-                    className="text-teal-500 hover:text-red-500 transition-colors ml-2 shrink-0"
-                    aria-label={`Remove ${file.name}`}
+            {policyFiles.length > 0 && (
+              <ul className="mt-2 space-y-1.5">
+                {policyFiles.map((file, i) => (
+                  <li
+                    key={`${file.name}-${i}`}
+                    className="flex items-center justify-between p-2 rounded-lg bg-teal-50 border border-teal-100"
                   >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileText className="w-4 h-4 text-teal-600 shrink-0" />
+                      <span
+                        className="text-teal-700 truncate"
+                        style={{ fontSize: "0.78rem", fontWeight: 500 }}
+                        title={file.name}
+                      >
+                        {file.name}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removePolicyFile(i)}
+                      className="text-teal-500 hover:text-red-500 transition-colors ml-2 shrink-0"
+                      aria-label={`Remove ${file.name}`}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
 
-          {policyFiles.length === 0 && (
-            <p className="text-slate-400 mt-2" style={{ fontSize: "0.7rem" }}>
-              Uses default BlueCross policy if omitted
-            </p>
-          )}
+            {policyFiles.length === 0 && (
+              <p className="text-slate-400 mt-2" style={{ fontSize: "0.7rem" }}>
+                Uses default BlueCross policy if omitted
+              </p>
+            )}
 
-          <input
-            ref={policyFileRef}
-            type="file"
-            accept=".pdf"
-            multiple
-            className="hidden"
-            onChange={handlePolicyUpload}
-          />
+            <input
+              ref={policyFileRef}
+              type="file"
+              accept=".pdf"
+              multiple
+              className="hidden"
+              onChange={handlePolicyUpload}
+            />
           </div>
         </div>
       </div>
