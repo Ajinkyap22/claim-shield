@@ -11,7 +11,9 @@ from pathlib import Path
 DB_PATH = Path(__file__).parent / "data" / "codes.db"
 
 NLM_ICD_URL = "https://clinicaltables.nlm.nih.gov/api/icd10cm/v3/search"
-NLM_CPT_URL = "https://clinicaltables.nlm.nih.gov/api/procedures/v3/search"
+# NLM procedures API is deprecated/empty — CPT is AMA-proprietary, no free public API exists.
+# CPT coverage relies on COMMON_CPT_CODES seeds + explicit codes extracted from notes.
+NLM_CPT_URL = None
 
 # Seed data — common ICD-10 codes (spine/pain/neurology) inserted on first run
 COMMON_ICD_CODES = [
@@ -126,9 +128,10 @@ def lookup_code_description(code: str, code_type: str) -> str | None:
     conn.close()
     if row:
         return row[0]
-    # Fall back to NLM API — search by code string and match exact
-    url = NLM_ICD_URL if code_type == "icd10" else NLM_CPT_URL
-    fetched = _nlm_fetch(url, code)
+    # Fall back to NLM API for ICD-10 only (no free CPT API)
+    if code_type != "icd10":
+        return None
+    fetched = _nlm_fetch(NLM_ICD_URL, code)
     for c, d in fetched:
         if c == code:
             return d
@@ -163,21 +166,25 @@ def _nlm_fetch(url: str, query: str) -> list[tuple[str, str]]:
 def fetch_codes_for_entity(entity_text: str, entity_group: str) -> list[CodeResult]:
     """
     Fetch ICD-10 or CPT codes for an entity.
-    Checks SQLite cache first; falls back to NLM API and caches results.
+    Checks SQLite cache first; falls back to NLM API for ICD-10 (CPT has no free API).
     """
     conn = _get_db()
     seed_common_cpt_codes(conn)
 
     is_icd = entity_group in {"Sign_symptom", "Disease_disorder", "Biological_structure"}
     table = "icd_codes" if is_icd else "cpt_codes"
-    url = NLM_ICD_URL if is_icd else NLM_CPT_URL
 
     cached = _cache_lookup(conn, table, entity_text)
     if cached:
         conn.close()
         return cached
 
-    fetched = _nlm_fetch(url, entity_text)
+    # CPT: no free NLM API — rely on seeded codes and explicit extraction from notes
+    if not is_icd:
+        conn.close()
+        return []
+
+    fetched = _nlm_fetch(NLM_ICD_URL, entity_text)
     if fetched:
         conn.executemany(
             f"INSERT OR IGNORE INTO {table} (code, description) VALUES (?, ?)",

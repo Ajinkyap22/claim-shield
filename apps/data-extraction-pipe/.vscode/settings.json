@@ -1,0 +1,7 @@
+{
+  "python.defaultInterpreterPath": "/Users/mohitsehgal/new project/claim-shield/apps/data-extraction-pipe/.venv/bin/python",
+  "python.analysis.extraPaths": [
+    "/Users/mohitsehgal/new project/claim-shield/apps/data-extraction-pipe"
+  ],
+  "python.analysis.typeCheckingMode": "basic"
+}
