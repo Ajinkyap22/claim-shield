@@ -77,7 +77,23 @@ export async function runPipeline(input: PipelineInput): Promise<void> {
       extracted,
     );
 
-    // Stage 2: ICD-10 / CPT Mapping
+    // Stage 2: Policy ingest — send extracted policy text to policy service
+    advanceStage(
+      pipelineId,
+      PipelineStage.POLICY_INGEST,
+      "Sending policy data to policy service...",
+    );
+    const policyIngestResults = await callPolicyIngest(
+      extracted.policyFiles ?? [],
+    );
+    completeStage(
+      pipelineId,
+      PipelineStage.POLICY_INGEST,
+      `Ingested ${policyIngestResults.length} policy document(s)`,
+      policyIngestResults,
+    );
+
+    // Stage 3: ICD-10 / CPT Mapping (policy service is called first above)
     advanceStage(
       pipelineId,
       PipelineStage.MAPPING,
@@ -91,7 +107,7 @@ export async function runPipeline(input: PipelineInput): Promise<void> {
       mappings,
     );
 
-    // Stage 3: Build FHIR Bundle
+    // Stage 4: Build FHIR Bundle
     advanceStage(
       pipelineId,
       PipelineStage.BUILDING_BUNDLE,
@@ -105,7 +121,7 @@ export async function runPipeline(input: PipelineInput): Promise<void> {
       bundle,
     );
 
-    // Stage 4: Clinical Validation + Fact Extraction
+    // Stage 5: Clinical Validation + Fact Extraction
     advanceStage(
       pipelineId,
       PipelineStage.VALIDATING,
@@ -120,7 +136,7 @@ export async function runPipeline(input: PipelineInput): Promise<void> {
       { validation_result, clinical_context },
     );
 
-    // Stage 5: Payer Denial Scoring
+    // Stage 6: Payer Denial Scoring
     advanceStage(
       pipelineId,
       PipelineStage.SCORING,
@@ -168,6 +184,50 @@ function mergeExtractedResponse(res: ExtractedResponse): string {
   }
   // Policy files are not included here; a separate policy service will use them.
   return parts.join("\n\n") || "";
+}
+
+/** Response from policy-service POST /policies/ingest (one per policy document). */
+export interface PolicyIngestResult {
+  policy_id: string;
+  payer_id: string;
+  payer_name: string;
+  policy_name: string;
+  criteria_count: number;
+  chunks_processed?: number;
+  criteria?: unknown[];
+}
+
+/** Send extracted policy text to the policy service; returns one result per document ingested. */
+async function callPolicyIngest(
+  policyFiles: ExtractedFile[],
+): Promise<PolicyIngestResult[]> {
+  if (policyFiles.length === 0) return [];
+
+  const results: PolicyIngestResult[] = [];
+  for (const f of policyFiles) {
+    if (!f.text?.trim() || f.error) continue;
+    const url = `${config.policyServiceUrl}/policies/ingest`;
+    const body = {
+      text: f.text.trim(),
+      metadata: {
+        payer_id: "user",
+        payer_name: "User",
+        policy_name: f.fileName || "Policy",
+      },
+    };
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(`Policy service ingest failed (${resp.status}): ${text}`);
+    }
+    const data = (await resp.json()) as PolicyIngestResult;
+    results.push(data);
+  }
+  return results;
 }
 
 async function callExtractFile(

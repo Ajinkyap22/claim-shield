@@ -3,6 +3,7 @@ import { z } from "zod";
 export const PipelineStage = {
   QUEUED: "queued",
   EXTRACTING: "extracting",
+  POLICY_INGEST: "policy_ingest",
   MAPPING: "mapping",
   BUILDING_BUNDLE: "building_bundle",
   VALIDATING: "validating",

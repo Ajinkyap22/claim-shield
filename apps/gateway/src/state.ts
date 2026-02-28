@@ -8,6 +8,7 @@ import { PipelineStage } from "@compliance-shield/shared";
 
 const STAGE_ORDER = [
   PipelineStage.EXTRACTING,
+  PipelineStage.POLICY_INGEST,
   PipelineStage.MAPPING,
   PipelineStage.BUILDING_BUNDLE,
   PipelineStage.VALIDATING,
@@ -42,7 +43,7 @@ export function createPipeline(): string {
 export function advanceStage(
   pipelineId: string,
   stage: string,
-  message = ""
+  message = "",
 ): void {
   const status = pipelineStatuses.get(pipelineId);
   if (!status) return;
@@ -55,7 +56,7 @@ export function advanceStage(
   }
 
   const completed = status.stages.filter(
-    (s) => s.status === "completed"
+    (s) => s.status === "completed",
   ).length;
   status.progress_pct = (completed / STAGE_ORDER.length) * 100;
 }
@@ -64,7 +65,7 @@ export function completeStage(
   pipelineId: string,
   stage: string,
   message = "",
-  data: unknown = null
+  data: unknown = null,
 ): void {
   const status = pipelineStatuses.get(pipelineId);
   if (!status) return;
@@ -77,7 +78,7 @@ export function completeStage(
   }
 
   const completed = status.stages.filter(
-    (s) => s.status === "completed"
+    (s) => s.status === "completed",
   ).length;
   status.progress_pct = (completed / STAGE_ORDER.length) * 100;
 }
@@ -92,7 +93,7 @@ export function failPipeline(pipelineId: string, error: string): void {
 
 export function finishPipeline(
   pipelineId: string,
-  result: PipelineResult
+  result: PipelineResult,
 ): void {
   const status = pipelineStatuses.get(pipelineId);
   if (!status) return;
