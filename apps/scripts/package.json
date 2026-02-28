@@ -6,6 +6,8 @@
     "test:scoring": "tsx test-scoring-flow.ts",
     "test:scoring:skip-ingest": "tsx test-scoring-flow.ts --skip-ingest",
     "test:generate-data": "tsx generate-test-data.ts",
+    "test:mapping-scoring": "tsx test-mapping-to-scoring.ts",
+    "test:mapping-scoring:skip-ingest": "tsx test-mapping-to-scoring.ts --skip-ingest",
     "test:validation-scoring": "tsx test-validation-to-scoring.ts",
     "test:validation-scoring:skip-ingest": "tsx test-validation-to-scoring.ts --skip-ingest"
   },

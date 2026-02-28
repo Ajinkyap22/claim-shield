@@ -14,6 +14,10 @@ import type {
   ClinicalValidationResult,
   ClinicalContext,
 } from "@compliance-shield/shared";
+import {
+  CheckResultSchema,
+  ClinicalValidationResultSchema,
+} from "@compliance-shield/shared";
 import { config } from "../config.js";
 import { extractClinicalContext } from "./fact-extractor.js";
 
@@ -31,6 +35,30 @@ function stripCodeFences(text: string): string {
   const fencePattern = /^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$/;
   const match = trimmed.match(fencePattern);
   return match ? match[1].trim() : trimmed;
+}
+
+function normalizeConfidence(confidence: unknown): number {
+  let value: number;
+
+  if (typeof confidence === "number") {
+    value = confidence;
+  } else if (typeof confidence === "string") {
+    value = Number(confidence.replace("%", "").trim());
+  } else {
+    value = 0.5;
+  }
+
+  if (!Number.isFinite(value)) return 0.5;
+  if (value > 1 && value <= 100) value /= 100;
+
+  return Math.max(0, Math.min(1, value));
+}
+
+function normalizeCheckResult(raw: unknown): CheckResult {
+  const candidate =
+    raw && typeof raw === "object" ? { ...(raw as Record<string, unknown>) } : {};
+  candidate.confidence = normalizeConfidence(candidate.confidence);
+  return CheckResultSchema.parse(candidate) as CheckResult;
 }
 
 function bundleSummary(bundle: ClaimBundle): string {
@@ -79,7 +107,8 @@ async function llmCheck(
       { role: "user", content: `Evaluate this claim:\n\n${summary}` },
     ],
   });
-  return JSON.parse(stripCodeFences(response.choices[0].message.content!)) as CheckResult;
+  const raw = JSON.parse(stripCodeFences(response.choices[0].message.content!));
+  return normalizeCheckResult(raw);
 }
 
 async function checkMedicalNecessity(
@@ -183,13 +212,15 @@ export async function runClinicalValidation(
     overallStatus = "pass";
   }
 
+  const validationResult = ClinicalValidationResultSchema.parse({
+    overall_status: overallStatus,
+    medical_necessity: medicalNecessity,
+    step_therapy: stepTherapy,
+    documentation,
+  }) as ClinicalValidationResult;
+
   return {
-    validation_result: {
-      overall_status: overallStatus,
-      medical_necessity: medicalNecessity,
-      step_therapy: stepTherapy,
-      documentation,
-    },
+    validation_result: validationResult,
     clinical_context: clinicalContext,
   };
 }
