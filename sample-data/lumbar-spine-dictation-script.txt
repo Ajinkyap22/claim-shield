@@ -1,0 +1,17 @@
+Patient is a 50 year old male, date of birth November 8, 1975. Date of service February 25, 2026.
+
+Chief complaint: Chronic low back pain with radicular symptoms into the lower extremity.
+
+History: Patient presents with a 6 month history of progressive low back pain. Pain began insidiously and has worsened over time, now radiating into the left leg with associated numbness and tingling. Patient reports difficulty with prolonged sitting and standing. Pain is exacerbated by forward flexion and lifting.
+
+Treatment history: Patient has undergone several weeks of physical therapy with minimal improvement. Has tried over-the-counter NSAIDs, ibuprofen 600 milligrams three times daily, with partial relief. No prior injections or surgical interventions.
+
+Physical examination: General appearance alert, cooperative, in mild distress. Lumbar spine shows decreased range of motion in flexion, limited to 60 degrees, extension limited to 15 degrees. Straight leg raise is positive on the left at 45 degrees, reproducing radicular symptoms. Motor examination shows 4 out of 5 strength in left ankle dorsiflexion, otherwise 5 out of 5 throughout. Sensory examination shows decreased sensation to light touch in L5 distribution on the left. Reflexes show left Achilles reflex diminished at 1 plus, right normal at 2 plus.
+
+Imaging: Recent lumbar MRI dated February 15, 2026 shows L4-L5 and L5-S1 disc herniation with moderate central canal stenosis and left foraminal narrowing at L5-S1.
+
+Assessment: Primary diagnosis M54.50, low back pain unspecified. Secondary diagnosis M51.26, other intervertebral disc displacement lumbar region. Tertiary diagnosis M54.16, radiculopathy lumbar region.
+
+Plan: Continue physical therapy with focus on core strengthening and lumbar stabilization exercises, CPT 97110 therapeutic exercises. Manual therapy for soft tissue mobilization, CPT 97140 manual therapy. Consider epidural steroid injection if conservative measures fail, CPT 62323 injection epidural lumbar sacral. Follow-up in 4 weeks to reassess symptoms and response to treatment. Prescribed meloxicam 15 milligrams daily for pain management.
+
+Attending physician: Dr. James Martinez, MD, Physical Medicine and Rehabilitation. Facility: Central Spine and Pain Management Center. NPI: 9876543210.
