@@ -61,8 +61,18 @@ services:
       - "8005:8005"
     env_file: .env
 
+  extract-file:
+    build:
+      context: .
+      dockerfile: apps/extract-file/Dockerfile
+    ports:
+      - "8080:8080"
+    env_file: .env
+
   frontend:
-    build: ./apps/frontend
+    build:
+      context: ./apps/frontend
+      dockerfile: Dockerfile
     ports:
       - "3000:3000"
     environment:

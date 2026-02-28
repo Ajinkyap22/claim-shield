@@ -136,9 +136,28 @@ export async function scoreForPayer(
     systemPrompt: SYSTEM_PROMPT,
     userMessage,
     temperature: 0,
+    responseFormat: { type: "json_object" },
   });
 
   const parsed = JSON.parse(rawResponse);
+  console.log("[DEBUG] LLM response keys:", Object.keys(parsed));
+  console.log("[DEBUG] Raw LLM response:", rawResponse.slice(0, 500));
+
+  // Normalize: LLM sometimes uses alternative field names
+  if (!parsed.rules_evaluated) {
+    parsed.rules_evaluated =
+      parsed.rules || parsed.criteria_evaluations || parsed.evaluations || [];
+  }
+  if (!parsed.payer_id) parsed.payer_id = payerId;
+  if (!parsed.payer_name) parsed.payer_name = payerName;
+
+  // Normalize individual rule fields: LLM sometimes returns evidence as a string
+  for (const rule of parsed.rules_evaluated) {
+    if (typeof rule.evidence === "string") {
+      rule.evidence = rule.evidence ? [rule.evidence] : [];
+    }
+  }
+
   return PayerScoreBreakdownSchema.parse(parsed);
 }
 

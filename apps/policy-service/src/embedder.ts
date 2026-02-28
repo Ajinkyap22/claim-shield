@@ -1,32 +1,44 @@
-import { Pinecone } from "@pinecone-database/pinecone";
 import { config } from "./config.js";
 
-let pinecone: Pinecone | null = null;
+const BATCH_SIZE = 96;
+const EMBEDDING_MODEL = "intfloat/multilingual-e5-large";
+const OPENROUTER_EMBEDDINGS_URL = "https://openrouter.ai/api/v1/embeddings";
 
-function getClient(): Pinecone {
-  if (!pinecone) {
-    pinecone = new Pinecone({ apiKey: config.pineconeApiKey });
-  }
-  return pinecone;
+interface EmbeddingResponse {
+  data: { embedding: number[]; index: number }[];
 }
 
-const BATCH_SIZE = 96;
-const EMBEDDING_MODEL = "multilingual-e5-large";
+async function callOpenRouterEmbeddings(texts: string[]): Promise<number[][]> {
+  const resp = await fetch(OPENROUTER_EMBEDDINGS_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.openrouterApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ input: texts, model: EMBEDDING_MODEL }),
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`OpenRouter embeddings failed (${resp.status}): ${text}`);
+  }
+
+  const json = (await resp.json()) as EmbeddingResponse;
+  return json.data
+    .sort((a, b) => a.index - b.index)
+    .map((d) => d.embedding);
+}
 
 /**
- * Embeds an array of texts using Pinecone's built-in inference API.
- * No separate OpenAI key needed -- uses the Pinecone API key.
+ * Embeds an array of texts using OpenRouter's embeddings API.
  */
 export async function embedTexts(texts: string[]): Promise<number[][]> {
-  const pc = getClient();
   const allEmbeddings: number[][] = [];
 
   for (let i = 0; i < texts.length; i += BATCH_SIZE) {
     const batch = texts.slice(i, i + BATCH_SIZE);
-    const response = await pc.inference.embed(EMBEDDING_MODEL, batch, {
-      inputType: "passage",
-    });
-    allEmbeddings.push(...response.map((d) => d.values as number[]));
+    const embeddings = await callOpenRouterEmbeddings(batch);
+    allEmbeddings.push(...embeddings);
   }
 
   return allEmbeddings;
@@ -34,14 +46,10 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
 
 /**
  * Embeds a single query text for similarity search.
- * Uses "query" inputType for asymmetric search.
  */
 export async function embedQuery(text: string): Promise<number[]> {
-  const pc = getClient();
-  const response = await pc.inference.embed(EMBEDDING_MODEL, [text], {
-    inputType: "query",
-  });
-  return response[0].values as number[];
+  const embeddings = await callOpenRouterEmbeddings([text]);
+  return embeddings[0];
 }
 
 /**
