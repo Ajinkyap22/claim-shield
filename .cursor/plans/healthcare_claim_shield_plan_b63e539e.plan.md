@@ -35,6 +35,27 @@ Shared plan for the team: business flow, USP, pipeline, and **domain-level requi
 
 **Pitch hook for the demo:** "Today, denials happen after you submit. We run the same logic the payer will run—with two AI agents playing clinician and payer—and give you a denial risk score and exact policy citations so you fix it before the claim ever leaves your system."
 
+**Scope extension: claim vs top US payers**
+
+- On the **results page**, optionally show how the same claim would fare against **major US payers** (e.g. UnitedHealthcare, Aetna, Cigna, Humana, Anthem/Elevance) in addition to the user’s uploaded policy.
+- This is **extra context**, not a replacement for the primary “check against my policy” result. Implementation can use reference payer rules or policy patterns; see FRONTEND_SPEC.md § 4.6 for UI placement and hierarchy.
+
+---
+
+## Selling the multi-payer comparison to judges
+
+**Objection:** "Patients already have one insurance—why would providers care how the claim stands against UHC, Aetna, etc.?"
+
+**How to sell it:**
+
+1. **Multi-payer practices** — Many providers bill **multiple payers** (Medicare, Medicaid, several commercial plans). The same claim may be submitted to two or three payers. Knowing “this claim scores 72 with your uploaded policy but would score 45 with UHC and 68 with Aetna” helps staff **prioritize** which payer to submit to first, or where to expect the most pushback and add documentation.
+2. **Contracting and negotiation** — Revenue cycle and **contracting teams** use denial and acceptance patterns by payer to renegotiate contracts or target process improvements. “Your documentation would pass UHC more often than Aetna for this procedure type” is **actionable intelligence** for contract and operational discussions.
+3. **Benchmarking and transparency** — “Your claim is in good shape for your current payer; here’s how it would fare with other major payers” positions the product as giving **broader market context**, not just pass/fail for one policy. It supports selling to larger groups and health systems that care about cross-payer performance.
+4. **Secondary insurance and workers’ comp** — In cases with **secondary coverage** or workers’ comp, the same documentation may be evaluated by more than one payer. Showing how the claim stacks up across payers helps staff know where to add or tighten documentation before submission.
+5. **Demo and differentiation** — Even when the primary value is “check against my payer,” showing “and here’s how you’d fare with UHC, Aetna, Cigna” makes the product feel **more comprehensive and data-driven** and gives judges a clear, memorable differentiator.
+
+**One-liner for judges:** “We give you a denial risk score for your payer—and show how the same claim would stand with UnitedHealthcare, Aetna, and other major payers, so multi-payer practices and contracting teams can prioritize and improve.”
+
 ---
 
 ## High-level flow (what the system does)
@@ -121,7 +142,7 @@ No patient data or historical claims are required.
 
 1. **Input:** User provides (a) doctor note (text and/or audio) and (b) optional policy PDF.
 2. **Action:** User triggers a single "Run compliance check" (or equivalent).
-3. **Results:** Show (a) **Denial Risk Score** (0–100) with short explanation, (b) claim summary (FHIR-like), (c) clinician view and payer view, (d) **policy-cited recommendations**, (e) any validation issues (e.g. invalid ICD-10).
+3. **Results:** Show (a) **Denial Risk Score** (0–100) with short explanation, (b) claim summary (FHIR-like), (c) clinician view and payer view, (d) **policy-cited recommendations**, (e) any validation issues (e.g. invalid ICD-10), (f) **optional extension:** how the same claim stands against **top US healthcare payers** (e.g. UnitedHealthcare, Aetna, Cigna, Humana)—as extra informational context on the results page.
 
 See FRONTEND_SPEC.md for more detailed UI behavior if needed.
 

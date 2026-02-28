@@ -127,7 +127,7 @@ Planned: Return in 1 year for next AWV. CPT 99396 (Preventive visit, 40–64). I
 const MOCK_TRANSCRIPT =
   "Patient is a 53-year-old female with longstanding right knee osteoarthritis. Conservative treatments over the past 8 weeks have failed. Recommending right total knee arthroplasty. Prior auth has been requested verbally.";
 
-const DOC_IMAGE_ACCEPT = ".pdf,.doc,.docx,image/*";
+const DOC_IMAGE_ACCEPT = ".pdf,.doc,.docx,.txt,image/*";
 
 /** Seed heights for waveform bars; repeated to fill width. */
 const WAVEFORM_SEED = [
@@ -428,6 +428,7 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
                         key={ds.id}
                         type="button"
                         role="option"
+                        aria-selected="false"
                         onClick={() => loadSample(ds.content)}
                         className="w-full text-left px-3 py-2 text-slate-700 hover:bg-teal-50 text-sm"
                       >

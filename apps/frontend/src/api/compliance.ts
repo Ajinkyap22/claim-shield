@@ -6,6 +6,7 @@
 import type {
   ComplianceCheckPayload,
   ComplianceCheckResponse,
+  PayerComparisonItem,
   PollStatusResponse,
 } from "@/types/compliance";
 
@@ -158,6 +159,22 @@ export const MOCK_COMPLIANCE_RESPONSE: ComplianceCheckResponse = {
   meta: { analyzedInMs: 0, policyName: "Demo (API unavailable)" },
 };
 
+/** Mock for optional payer comparison (UHC + Aetna only). Used when user clicks "Compare with top providers". */
+export const MOCK_PAYER_COMPARISON: PayerComparisonItem[] = [
+  {
+    payerName: "UnitedHealthcare",
+    score: 68,
+    statusLabel: "Review needed",
+    note: "Stricter prior auth for joint replacement.",
+  },
+  {
+    payerName: "Aetna",
+    score: 72,
+    statusLabel: "Review needed",
+    note: "Laterality and 12-week PT threshold.",
+  },
+];
+
 function getMockComplianceResponse(): ComplianceCheckResponse {
   return MOCK_COMPLIANCE_RESPONSE;
 }
@@ -211,6 +228,45 @@ export async function runComplianceCheck(
     }
     await new Promise((r) => setTimeout(r, MOCK_RESPONSE_DELAY_MS));
     return getMockComplianceResponse();
+  }
+}
+
+/**
+ * Optional: fetch how this claim would fare vs top US payers (e.g. UHC, Aetna).
+ * Separate from the main compliance check to keep that request fast and save cost.
+ * GET /api/v1/claim-check/payer-comparison?jobId=... (when backend supports it).
+ */
+export async function fetchPayerComparison(options?: {
+  jobId?: string;
+}): Promise<PayerComparisonItem[]> {
+  const params = new URLSearchParams();
+  if (options?.jobId) params.set("jobId", options.jobId);
+  const qs = params.toString();
+  const url = `${API_BASE}/api/v1/claim-check/payer-comparison${qs ? `?${qs}` : ""}`;
+
+  try {
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = (await res.json()) as PayerComparisonItem[];
+      return Array.isArray(data) ? data : MOCK_PAYER_COMPARISON;
+    }
+    if (res.status === 404) {
+      await new Promise((r) => setTimeout(r, 800));
+      return MOCK_PAYER_COMPARISON;
+    }
+    const text = await res.text();
+    throw new Error(
+      `Payer comparison failed: ${res.status} ${res.statusText}${text ? ` — ${text.slice(0, 150)}` : ""}`,
+    );
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      err.message.startsWith("Payer comparison failed:")
+    ) {
+      throw err;
+    }
+    await new Promise((r) => setTimeout(r, 800));
+    return MOCK_PAYER_COMPARISON;
   }
 }
 

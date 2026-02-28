@@ -42,14 +42,19 @@ export function RecommendationsList({
   onFixAll,
   fixAllInProgress = false,
 }: RecommendationsListProps) {
-  const [lastCopiedId, setLastCopiedId] = useState<string | number | null>(null);
+  const [lastCopiedId, setLastCopiedId] = useState<string | number | null>(
+    null,
+  );
 
   const copyRecText = (rec: RecommendationItem): string => {
     const line1 = `${rec.title} — ${formatCitation(rec.citation)}`;
     return rec.detail ? `${line1}\n${rec.detail}` : line1;
   };
 
-  const handleCopyRec = async (rec: RecommendationItem, rowId: string | number) => {
+  const handleCopyRec = async (
+    rec: RecommendationItem,
+    rowId: string | number,
+  ) => {
     try {
       await navigator.clipboard.writeText(copyRecText(rec));
       setLastCopiedId(rowId);
@@ -62,7 +67,8 @@ export function RecommendationsList({
   const list = (
     propRecommendations?.length
       ? propRecommendations
-      : (MOCK_COMPLIANCE_RESPONSE.recommendations ?? []) as RecommendationItem[]
+      : ((MOCK_COMPLIANCE_RESPONSE.recommendations ??
+          []) as RecommendationItem[])
   ).map((r) => ({
     ...r,
     priorityColor: r.priorityColor ?? defaultPriorityColor(r.priority),
@@ -102,7 +108,10 @@ export function RecommendationsList({
         </div>
         <div className="flex items-center gap-1.5">
           <BookOpen className="w-3.5 h-3.5 text-slate-400" />
-          <span className="text-[var(--body-text-muted)]" style={{ fontSize: "0.7rem" }}>
+          <span
+            className="text-[var(--body-text-muted)]"
+            style={{ fontSize: "0.7rem" }}
+          >
             BlueCross BlueShield Policy v2026.1
           </span>
         </div>
@@ -166,47 +175,52 @@ export function RecommendationsList({
                   </div>
 
                   {/* Citation: prominent, easy to spot */}
-                  <div
-                    className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 shrink-0"
-                    style={{
-                      backgroundColor: "#fffbeb",
-                      border: "1px solid #fde68a",
-                    }}
-                    title={
-                      rec.citationFull
-                        ? formatCitation(rec.citationFull)
-                        : undefined
-                    }
-                  >
-                    <BookOpen className="w-3 h-3 text-amber-500" />
-                    <span
-                      className="font-mono"
+                  <div className="flex items-center gap-4">
+                    <div
+                      className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 shrink-0"
                       style={{
-                        fontSize: "0.72rem",
-                        fontWeight: 700,
-                        color: "#b45309",
+                        backgroundColor: "#fffbeb",
+                        border: "1px solid #fde68a",
                       }}
+                      title={
+                        rec.citationFull
+                          ? formatCitation(rec.citationFull)
+                          : undefined
+                      }
                     >
-                      {formatCitation(rec.citation)}
-                    </span>
+                      <BookOpen className="w-3 h-3 text-amber-500" />
+                      <span
+                        className="font-mono"
+                        style={{
+                          fontSize: "0.72rem",
+                          fontWeight: 700,
+                          color: "#b45309",
+                        }}
+                      >
+                        {formatCitation(rec.citation)}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleCopyRec(rec, rec.id ?? idx)}
+                      className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 hover:border-slate-300 transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500/25 focus:ring-offset-2 shrink-0"
+                      title="Copy recommendation and citation"
+                      aria-label={
+                        lastCopiedId === (rec.id ?? idx)
+                          ? "Copied"
+                          : "Copy recommendation and citation"
+                      }
+                      style={{ fontSize: "0.72rem" }}
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      {lastCopiedId === (rec.id ?? idx) ? (
+                        <span className="text-teal-600 font-medium">
+                          Copied
+                        </span>
+                      ) : null}
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleCopyRec(rec, rec.id ?? idx)}
-                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 hover:border-slate-300 transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500/25 focus:ring-offset-2 shrink-0"
-                    title="Copy recommendation and citation"
-                    aria-label={
-                      lastCopiedId === (rec.id ?? idx)
-                        ? "Copied"
-                        : "Copy recommendation and citation"
-                    }
-                    style={{ fontSize: "0.72rem" }}
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                    {lastCopiedId === (rec.id ?? idx) ? (
-                      <span className="text-teal-600 font-medium">Copied</span>
-                    ) : null}
-                  </button>
                 </div>
 
                 {rec.detail && (
@@ -243,7 +257,8 @@ export function RecommendationsList({
             style={{
               fontSize: "0.9375rem",
               fontWeight: 700,
-              background: "linear-gradient(135deg, var(--navy-900) 0%, var(--navy-700) 100%)",
+              background:
+                "linear-gradient(135deg, var(--navy-900) 0%, var(--navy-700) 100%)",
               boxShadow: "0 2px 12px rgba(15, 39, 68, 0.2)",
             }}
           >

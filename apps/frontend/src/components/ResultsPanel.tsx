@@ -13,6 +13,7 @@ import { ClaimSummary } from "@/components/ClaimSummary";
 import { DualAgentView } from "@/components/DualAgentView";
 import { RecommendationsList } from "@/components/RecommendationsList";
 import { ValidationIssues } from "@/components/ValidationIssues";
+import { PayerComparisonBlock } from "@/components/PayerComparisonBlock";
 import type { ComplianceCheckResponse } from "@/types/compliance";
 import { MOCK_COMPLIANCE_RESPONSE } from "@/api/compliance";
 import { formatCitation } from "@/lib/formatCitation";
@@ -237,8 +238,13 @@ export function ResultsPanel({ result = null, onReset }: ResultsPanelProps) {
         </div>
       </motion.div>
 
+      {/* ── HOW CLAIM STANDS VS TOP US PAYERS (optional; separate request) ── */}
+      <motion.div {...fadeUp(0.12)}>
+        <PayerComparisonBlock />
+      </motion.div>
+
       {/* ── DUAL AGENT VIEW ── */}
-      <motion.div {...fadeUp(0.16)}>
+      <motion.div {...fadeUp(0.18)}>
         <div className="flex items-center gap-3 mb-3">
           <div className="flex-1 h-px bg-slate-200/80" />
           <span className="text-[var(--body-text-muted)] flex items-center gap-1.5 font-display" style={{ fontSize: "0.72rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
@@ -252,17 +258,17 @@ export function ResultsPanel({ result = null, onReset }: ResultsPanelProps) {
       </motion.div>
 
       {/* ── RECOMMENDATIONS ── */}
-      <motion.div {...fadeUp(0.24)}>
+      <motion.div {...fadeUp(0.26)}>
         <RecommendationsList recommendations={result?.recommendations} />
       </motion.div>
 
       {/* ── VALIDATION ISSUES ── */}
-      <motion.div {...fadeUp(0.3)}>
+      <motion.div {...fadeUp(0.32)}>
         <ValidationIssues validationIssues={result?.validationIssues} />
       </motion.div>
 
       {/* Footer note */}
-      <motion.div {...fadeUp(0.34)}>
+      <motion.div {...fadeUp(0.38)}>
         <div className="text-center py-4">
           <p className="text-[var(--body-text-muted)]" style={{ fontSize: "0.72rem" }}>
             ComplianceShield can be embedded in your billing workflow or accessed via{" "}
