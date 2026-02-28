@@ -1,0 +1,81 @@
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: apps/gateway/Dockerfile
+    ports:
+      - "8000:8000"
+    env_file: .env
+    depends_on:
+      - extraction-service
+      - mapping-service
+      - validation-service
+      - scoring-service
+    environment:
+      EXTRACTION_SERVICE_URL: http://extraction-service:8001
+      MAPPING_SERVICE_URL: http://mapping-service:8002
+      VALIDATION_SERVICE_URL: http://validation-service:8003
+      SCORING_SERVICE_URL: http://scoring-service:8004
+
+  extraction-service:
+    build:
+      context: .
+      dockerfile: apps/extraction-service/Dockerfile
+    ports:
+      - "8001:8001"
+    env_file: .env
+
+  mapping-service:
+    build:
+      context: .
+      dockerfile: apps/mapping-service/Dockerfile
+    ports:
+      - "8002:8002"
+    env_file: .env
+
+  validation-service:
+    build:
+      context: .
+      dockerfile: apps/validation-service/Dockerfile
+    ports:
+      - "8003:8003"
+    env_file: .env
+
+  scoring-service:
+    build:
+      context: .
+      dockerfile: apps/scoring-service/Dockerfile
+    ports:
+      - "8004:8004"
+    env_file: .env
+    depends_on:
+      - policy-service
+    environment:
+      POLICY_SERVICE_URL: http://policy-service:8005
+
+  policy-service:
+    build:
+      context: .
+      dockerfile: apps/policy-service/Dockerfile
+    ports:
+      - "8005:8005"
+    env_file: .env
+
+  extract-file:
+    build:
+      context: .
+      dockerfile: apps/extract-file/Dockerfile
+    ports:
+      - "8080:8080"
+    env_file: .env
+
+  frontend:
+    build:
+      context: ./apps/frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    depends_on:
+      - gateway
