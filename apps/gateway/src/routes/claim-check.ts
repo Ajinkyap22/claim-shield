@@ -1,7 +1,11 @@
 import { Router, type Request, type Response } from "express";
 import multer from "multer";
 import { createPipeline, getStatus, getResult } from "../state.js";
-import { runPipeline, type PipelineFilePart } from "../orchestrator.js";
+import {
+  runPipeline,
+  callScoring,
+  type PipelineFilePart,
+} from "../orchestrator.js";
 import type { PollStatusResponse } from "@compliance-shield/shared";
 import { PipelineStage } from "@compliance-shield/shared";
 import {
@@ -58,7 +62,7 @@ router.post(
       audioFiles: audioFiles.map(toFilePart),
       policyFiles: policyFiles.map(toFilePart),
       documentationFiles: documentationFiles.map(toFilePart),
-      payers: DEFAULT_PAYERS,
+      payers: [], // Main flow scores against uploaded policy only; DEFAULT_PAYERS used only for payer-comparison
     });
 
     res.status(201).json({ jobId: pipelineId });
@@ -91,6 +95,7 @@ router.get("/status", (req: Request, res: Response) => {
     stepDescription:
       status.stages.find((s) => s.stage === status.current_stage)?.message ??
       "",
+    progressPercent: status.progress_pct,
     error: status.error ?? undefined,
   };
 
@@ -105,7 +110,8 @@ router.get("/status", (req: Request, res: Response) => {
 });
 
 // GET /api/v1/claim-check/payer-comparison?jobId=...
-router.get("/payer-comparison", (req: Request, res: Response) => {
+// Runs scoring against DEFAULT_PAYERS (top payers) on demand; does not use uploaded policy.
+router.get("/payer-comparison", async (req: Request, res: Response) => {
   const jobId = req.query.jobId as string;
   if (!jobId?.trim()) {
     res.status(400).json({ detail: "Missing jobId query parameter." });
@@ -125,8 +131,23 @@ router.get("/payer-comparison", (req: Request, res: Response) => {
     return;
   }
 
-  const comparison = mapPipelineResultToPayerComparison(result);
-  res.json(comparison);
+  try {
+    const comparisonScores = await callScoring(
+      result.claim_bundle,
+      result.validation_result,
+      result.clinical_context,
+      DEFAULT_PAYERS,
+    );
+    const comparisonResult = {
+      ...result,
+      payer_scores: comparisonScores,
+    };
+    const comparison = mapPipelineResultToPayerComparison(comparisonResult);
+    res.json(comparison);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ detail: message });
+  }
 });
 
 export default router;

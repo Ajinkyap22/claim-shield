@@ -4,6 +4,7 @@ import type { PolicyCriterion, IngestRequestMetadata } from "@compliance-shield/
 import { PolicyCriterionSchema } from "@compliance-shield/shared";
 import { z } from "zod";
 import { config } from "./config.js";
+import { timestamp } from "./logger.js";
 import type { TextChunk } from "./pdf-parser.js";
 
 const openai = new OpenAI({
@@ -144,7 +145,7 @@ async function extractFromBatch(
   });
 
   if (response.usage) {
-    console.log(`[policy-extractor] Usage — model: ${response.model}, prompt: ${response.usage.prompt_tokens}, completion: ${response.usage.completion_tokens}, total: ${response.usage.total_tokens}`);
+    console.log(`[${timestamp()}] [policy-extractor] Usage — model: ${response.model}, prompt: ${response.usage.prompt_tokens}, completion: ${response.usage.completion_tokens}, total: ${response.usage.total_tokens}`);
   }
 
   const raw = JSON.parse(stripCodeFences(response.choices[0].message.content!));

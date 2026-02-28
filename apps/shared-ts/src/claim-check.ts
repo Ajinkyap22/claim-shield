@@ -49,6 +49,8 @@ export interface PollStatusResponse {
   step?: string;
   stepLabel?: string;
   stepDescription?: string;
+  /** 0–100, from pipeline stage progress. Use for progress bar when present. */
+  progressPercent?: number;
   result?: ComplianceCheckResponse;
   error?: string;
 }

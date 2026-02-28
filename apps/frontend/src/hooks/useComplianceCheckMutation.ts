@@ -1,21 +1,21 @@
 import { useMutation } from "@tanstack/react-query";
-import { runComplianceCheck } from "@/api/compliance";
-import type {
-  ComplianceCheckPayload,
-  ComplianceCheckResponse,
-} from "@/types/compliance";
+import { runComplianceCheck, type RunComplianceCheckResult } from "@/api/compliance";
+import type { ComplianceCheckPayload } from "@/types/compliance";
+import type { PollStatusResponse } from "@/types/compliance";
+
+export interface UseComplianceCheckMutationOptions {
+  onStatus?: (status: PollStatusResponse) => void;
+}
 
 /**
- * Runs the compliance check. When the backend supports async pipeline,
- * runComplianceCheck can return { jobId }; then poll pollCheckStatus(jobId)
- * and expose step/stepLabel/stepDescription to drive LoadingState.
+ * Runs the compliance check: POST → jobId → poll until complete.
+ * onStatus is called with each poll response so the UI can show step label/description.
  */
-export function useComplianceCheckMutation() {
-  return useMutation<
-    ComplianceCheckResponse,
-    Error,
-    ComplianceCheckPayload
-  >({
-    mutationFn: (payload: ComplianceCheckPayload) => runComplianceCheck(payload),
+export function useComplianceCheckMutation(
+  options?: UseComplianceCheckMutationOptions,
+) {
+  return useMutation<RunComplianceCheckResult, Error, ComplianceCheckPayload>({
+    mutationFn: (payload: ComplianceCheckPayload) =>
+      runComplianceCheck(payload, { onStatus: options?.onStatus }),
   });
 }

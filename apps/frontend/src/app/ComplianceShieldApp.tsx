@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   AlertCircle,
@@ -21,7 +21,18 @@ import { useComplianceCheckMutation } from "@/hooks/useComplianceCheckMutation";
 import type {
   ComplianceCheckPayload,
   ComplianceCheckResponse,
+  PollStatusResponse,
 } from "@/types/compliance";
+
+const STEP_LABELS: Record<string, string> = {
+  extracting: "Extracting input…",
+  policy_ingest: "Sending policy to policy service…",
+  mapping: "Mapping to codes and building claim…",
+  building_bundle: "Building FHIR record…",
+  validating: "Validating clinical documentation…",
+  scoring: "Scoring against payer policy…",
+  completed: "Complete",
+};
 
 type AppState = "idle" | "loading" | "success" | "error";
 
@@ -37,16 +48,19 @@ function getAppState(
 }
 
 export default function ComplianceShieldApp() {
-  const mutation = useComplianceCheckMutation();
+  const [pollStatus, setPollStatus] = useState<PollStatusResponse | null>(null);
+  const mutation = useComplianceCheckMutation({ onStatus: setPollStatus });
   const { mutate, isPending, isSuccess, isError, data, error, reset } =
     mutation;
   const appState = getAppState(isPending, isSuccess, isError);
   const loading = appState === "loading";
-  const result: ComplianceCheckResponse | null = isSuccess
-    ? (data ?? null)
+  const result: ComplianceCheckResponse | null = isSuccess && data
+    ? data
     : null;
+  const jobId = isSuccess && data && "jobId" in data ? data.jobId : undefined;
 
   const handleSubmit = (payload: ComplianceCheckPayload) => {
+    setPollStatus(null);
     mutate(payload);
   };
 
@@ -282,7 +296,17 @@ export default function ComplianceShieldApp() {
               className="bg-white rounded-2xl border border-slate-200/80"
               style={{ boxShadow: "var(--shadow-card)" }}
             >
-              <LoadingState />
+              <LoadingState
+                stepLabel={
+                  pollStatus
+                    ? STEP_LABELS[pollStatus.step ?? ""] ??
+                      pollStatus.stepLabel ??
+                      pollStatus.step
+                    : undefined
+                }
+                stepDescription={pollStatus?.stepDescription}
+                progressPercent={pollStatus?.progressPercent}
+              />
             </motion.section>
           )}
         </AnimatePresence>
@@ -322,7 +346,11 @@ export default function ComplianceShieldApp() {
                   Fix the issues below before sending to payer
                 </span>
               </div>
-              <ResultsPanel result={result} onReset={handleReset} />
+              <ResultsPanel
+                result={result}
+                jobId={jobId}
+                onReset={handleReset}
+              />
             </motion.section>
           )}
         </AnimatePresence>

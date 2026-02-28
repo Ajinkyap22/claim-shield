@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import { ClaimBundleSchema } from "@compliance-shield/shared";
 import { config } from "./config.js";
+import { timestamp } from "./logger.js";
 import { runClinicalValidation } from "./agents/clinical-validation.js";
 
 const app = express();
@@ -20,12 +21,15 @@ app.post("/validate", async (req, res) => {
     res.json(output);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : undefined;
+    console.error(`[${timestamp()}] Validate error:`, message);
+    if (stack) console.error(`[${timestamp()}] Stack:`, stack);
     res.status(500).json({ detail: message });
   }
 });
 
 app.listen(config.port, () => {
   console.log(
-    `Validation service running on http://localhost:${config.port}`
+    `[${timestamp()}] Validation service running on http://localhost:${config.port}`,
   );
 });

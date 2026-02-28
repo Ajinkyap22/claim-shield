@@ -12,6 +12,11 @@ import type {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
+const POLL_INTERVAL_MS = 2000;
+
+/** Result of runComplianceCheck when backend returns jobId (async pipeline). */
+export type RunComplianceCheckResult = ComplianceCheckResponse & { jobId?: string };
+
 function buildFormData(payload: ComplianceCheckPayload): FormData {
   const fd = new FormData();
   fd.append("clinicalNote", payload.clinicalNote);
@@ -189,41 +194,80 @@ function isLikelyApiUnavailable(res: Response): boolean {
 }
 
 /**
- * Runs the compliance check against the backend.
- * POSTs FormData to /api/v1/claim-check; returns parsed ComplianceCheckResponse.
- *
- * - 2xx: returns response immediately (no delay). Same once real API is integrated.
- * - 404 or network error: API assumed unavailable; after a short delay returns mock for demo. Remove delay when API is wired.
- * - Other 4xx/5xx: throws so the UI shows the error. Real API validation/server errors are shown, not mock.
+ * POST to start the compliance check. Backend returns 201 with { jobId }.
+ */
+async function startComplianceCheck(
+  payload: ComplianceCheckPayload,
+): Promise<{ jobId: string }> {
+  const fd = buildFormData(payload);
+  const url = `${API_BASE}/api/v1/claim-check`;
+  const res = await fetch(url, { method: "POST", body: fd });
+  if (res.status === 201) {
+    const data = (await res.json()) as { jobId?: string };
+    if (data?.jobId) return { jobId: data.jobId };
+  }
+  if (isLikelyApiUnavailable(res)) {
+    throw new Error("API_UNAVAILABLE");
+  }
+  const text = await res.text();
+  throw new Error(
+    `Compliance check failed: ${res.status} ${res.statusText}${text ? ` — ${text.slice(0, 200)}` : ""}`,
+  );
+}
+
+/**
+ * Poll status until complete or failed. Calls onStatus with each response for loading UI.
+ */
+export async function pollUntilComplete(
+  jobId: string,
+  options?: {
+    onStatus?: (status: PollStatusResponse) => void;
+    intervalMs?: number;
+  },
+): Promise<ComplianceCheckResponse> {
+  const intervalMs = options?.intervalMs ?? POLL_INTERVAL_MS;
+  for (;;) {
+    const status = await pollCheckStatus(jobId);
+    options?.onStatus?.(status);
+    if (status.status === "complete" && status.result) {
+      return status.result;
+    }
+    if (status.status === "failed") {
+      throw new Error(status.error ?? "Pipeline failed");
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+}
+
+/**
+ * Runs the compliance check: POST to get jobId (via startComplianceCheck), then poll until complete.
+ * Returns the result and jobId (for payer-comparison). On 404/network error, falls back to mock after delay.
  */
 export async function runComplianceCheck(
   payload: ComplianceCheckPayload,
-): Promise<ComplianceCheckResponse> {
-  const fd = buildFormData(payload);
-  const url = `${API_BASE}/api/v1/claim-check`;
-
+  options?: { onStatus?: (status: PollStatusResponse) => void },
+): Promise<RunComplianceCheckResult> {
   try {
-    const res = await fetch(url, { method: "POST", body: fd });
-
-    if (res.ok) {
-      const data = (await res.json()) as ComplianceCheckResponse;
-      return data;
-    }
-
-    if (isLikelyApiUnavailable(res)) {
+    const { jobId } = await startComplianceCheck(payload);
+    const result = await pollUntilComplete(jobId, {
+      onStatus: options?.onStatus,
+    });
+    return { ...result, jobId };
+  } catch (err) {
+    if (err instanceof Error && err.message === "API_UNAVAILABLE") {
       await new Promise((r) => setTimeout(r, MOCK_RESPONSE_DELAY_MS));
       return getMockComplianceResponse();
     }
-
-    const text = await res.text();
-    throw new Error(
-      `Compliance check failed: ${res.status} ${res.statusText}${text ? ` — ${text.slice(0, 200)}` : ""}`,
-    );
-  } catch (err) {
     if (
       err instanceof Error &&
       err.message.startsWith("Compliance check failed:")
     ) {
+      throw err;
+    }
+    if (err instanceof Error && err.message.startsWith("Status check failed:")) {
+      throw err;
+    }
+    if (err instanceof Error && err.message.startsWith("Pipeline failed")) {
       throw err;
     }
     await new Promise((r) => setTimeout(r, MOCK_RESPONSE_DELAY_MS));

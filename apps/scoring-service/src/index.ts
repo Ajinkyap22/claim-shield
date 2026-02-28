@@ -14,7 +14,6 @@ import type {
 } from "@compliance-shield/shared";
 import { config } from "./config.js";
 import { scoreAllPayers } from "./evaluator.js";
-import { toComplianceCheckResponse } from "./transformer.js";
 import type { ScoreRequest } from "./types.js";
 
 const app = express();
@@ -46,11 +45,9 @@ app.post("/score", async (req, res) => {
     const context = ClinicalContextSchema.parse(clinical_context) as ClinicalContext;
 
     const payerScores = await scoreAllPayers(payers, context, bundle, validation);
-    const elapsedMs = Date.now() - start;
 
-    const response = toComplianceCheckResponse(payerScores, validation, elapsedMs);
-
-    res.json(response);
+    // Return payer_scores so the gateway can build PipelineResult and map to ComplianceCheckResponse
+    res.json({ payer_scores: payerScores });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("Scoring error:", message);

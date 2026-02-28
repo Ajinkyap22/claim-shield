@@ -36,7 +36,12 @@ function getStatusDisplay(item: PayerComparisonItem): {
   return { label: "—", bg: "#f1f5f9", textColor: "#64748b", border: "#e2e8f0" };
 }
 
-export function PayerComparisonBlock() {
+export interface PayerComparisonBlockProps {
+  /** When provided, payer-comparison API is called with this jobId. */
+  jobId?: string;
+}
+
+export function PayerComparisonBlock({ jobId }: PayerComparisonBlockProps = {}) {
   const [data, setData] = useState<PayerComparisonItem[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +50,7 @@ export function PayerComparisonBlock() {
     setLoading(true);
     setError(null);
     try {
-      const result = await fetchPayerComparison();
+      const result = await fetchPayerComparison(jobId ? { jobId } : undefined);
       setData(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Comparison failed. Please try again.");

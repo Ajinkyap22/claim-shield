@@ -56,7 +56,7 @@ interface ValidationOutput {
 }
 
 export async function runPipeline(input: PipelineInput): Promise<void> {
-  const { pipelineId, payers } = input;
+  const { pipelineId } = input;
   const start = Date.now();
 
   try {
@@ -146,7 +146,11 @@ export async function runPipeline(input: PipelineInput): Promise<void> {
       { validation_result, clinical_context },
     );
 
-    // Stage 6: Payer Denial Scoring
+    // Stage 6: Payer Denial Scoring — use payers from this run's policy ingest only (not default/top payers)
+    const payersForScoring =
+      policyIngestResults.length > 0
+        ? [...new Set(policyIngestResults.map((p) => p.payer_id))]
+        : [];
     advanceStage(
       pipelineId,
       PipelineStage.SCORING,
@@ -156,7 +160,7 @@ export async function runPipeline(input: PipelineInput): Promise<void> {
       bundle,
       validation_result,
       clinical_context,
-      payers,
+      payersForScoring,
     );
     completeStage(
       pipelineId,
@@ -207,6 +211,9 @@ export interface PolicyIngestResult {
   criteria?: unknown[];
 }
 
+/** Timeout for policy ingest (large PDFs can take several minutes due to many LLM calls). */
+const POLICY_INGEST_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
 /** Send extracted policy text to the policy service via multipart/form-data; returns one result per document ingested. */
 async function callPolicyIngest(
   policyFiles: ExtractedFile[],
@@ -227,7 +234,25 @@ async function callPolicyIngest(
         policy_name: f.fileName || "Policy",
       }),
     );
-    const resp = await fetch(url, { method: "POST", body: form });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), POLICY_INGEST_TIMEOUT_MS);
+    let resp: Response;
+    try {
+      resp = await fetch(url, {
+        method: "POST",
+        body: form,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      clearTimeout(timeoutId);
+      if (err instanceof Error && err.name === "AbortError") {
+        throw new Error(
+          "Policy ingest timed out (10 min). Large PDFs take many LLM calls; try a smaller document or try again.",
+        );
+      }
+      throw err;
+    }
+    clearTimeout(timeoutId);
     if (!resp.ok) {
       const text = await resp.text();
       throw new Error(`Policy service ingest failed (${resp.status}): ${text}`);
@@ -392,7 +417,21 @@ async function callValidation(bundle: ClaimBundle): Promise<ValidationOutput> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(bundle),
   });
-  if (!resp.ok) throw new Error(`Validation service error: ${resp.status}`);
+  if (!resp.ok) {
+    const bodyText = await resp.text();
+    let detail = bodyText;
+    try {
+      const json = JSON.parse(bodyText) as { detail?: string };
+      if (json.detail) detail = json.detail;
+    } catch {
+      // use raw body
+    }
+    console.error(
+      `[orchestrator] Validation service error ${resp.status}:`,
+      detail,
+    );
+    throw new Error(`Validation service error: ${resp.status} — ${detail}`);
+  }
 
   const data = (await resp.json()) as Record<string, unknown>;
   return {
@@ -403,12 +442,14 @@ async function callValidation(bundle: ClaimBundle): Promise<ValidationOutput> {
   };
 }
 
-async function callScoring(
+/** Call scoring service for a given set of payers (used by main pipeline and by payer-comparison endpoint). */
+export async function callScoring(
   bundle: ClaimBundle,
   validation: ClinicalValidationResult,
   clinicalContext: ClinicalContext,
   payers: string[],
 ): Promise<Record<string, PayerScoreBreakdown>> {
+  if (payers.length === 0) return {};
   const url = `${config.scoringServiceUrl}/score`;
   const resp = await fetch(url, {
     method: "POST",
@@ -425,7 +466,7 @@ async function callScoring(
     payer_scores: Record<string, unknown>;
   };
   const scores: Record<string, PayerScoreBreakdown> = {};
-  for (const [key, val] of Object.entries(data.payer_scores)) {
+  for (const [key, val] of Object.entries(data.payer_scores ?? {})) {
     scores[key] = PayerScoreBreakdownSchema.parse(val);
   }
   return scores;

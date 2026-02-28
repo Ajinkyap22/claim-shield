@@ -31,7 +31,7 @@ const DEFAULT_STEPS = [
 ];
 
 const STEP_INTERVAL_MS = 1500;
-/** Match total loading time (e.g. MOCK_RESPONSE_DELAY_MS in api/compliance.ts). Bar fills over this duration. */
+/** Fallback when no API progress: bar fills over this duration. */
 const PROGRESS_BAR_DURATION_SEC = 8.5;
 const easeSmooth = [0.25, 0.46, 0.45, 0.94] as [number, number, number, number];
 
@@ -40,15 +40,19 @@ export interface LoadingStateProps {
   stepLabel?: string;
   /** Subtitle/description when driven by API. */
   stepDescription?: string;
+  /** 0–100 from pipeline status; when set, progress bar is driven by actual pipeline progress. */
+  progressPercent?: number;
 }
 
 export function LoadingState({
   stepLabel,
   stepDescription,
+  progressPercent,
 }: LoadingStateProps = {}) {
   const [stepIndex, setStepIndex] = useState(0);
 
   const useApiStep = stepLabel != null;
+  const useApiProgress = progressPercent != null;
   const title = useApiStep ? stepLabel : DEFAULT_STEPS[stepIndex % DEFAULT_STEPS.length].label;
   const description = useApiStep
     ? (stepDescription ?? "")
@@ -125,19 +129,27 @@ export function LoadingState({
         ))}
       </div>
 
-      {/* Progress bar */}
+      {/* Progress bar: driven by pipeline progress when available, else time-based */}
       <div className="w-full max-w-sm mt-10">
         <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
           <motion.div
             className="h-full rounded-full"
             style={{ background: "linear-gradient(90deg, var(--teal-600), #1d4ed8)" }}
-            initial={{ width: "0%" }}
-            animate={{ width: "90%" }}
-            transition={{ duration: PROGRESS_BAR_DURATION_SEC, ease: easeSmooth }}
+            initial={false}
+            animate={{
+              width: useApiProgress
+                ? `${Math.min(100, Math.max(0, progressPercent ?? 0))}%`
+                : "90%",
+            }}
+            transition={
+              useApiProgress
+                ? { duration: 0.4, ease: easeSmooth }
+                : { duration: PROGRESS_BAR_DURATION_SEC, ease: easeSmooth }
+            }
           />
         </div>
         <p className="text-center text-[var(--body-text-muted)] mt-2" style={{ fontSize: "0.7rem" }}>
-          Typically completes in a few seconds
+          {useApiProgress ? "Pipeline in progress…" : "Typically completes in a few seconds"}
         </p>
       </div>
     </motion.div>

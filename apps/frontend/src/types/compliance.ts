@@ -88,10 +88,12 @@ export interface ClaimCheckJobStart {
  */
 export interface PollStatusResponse {
   status: "pending" | "complete" | "failed";
-  /** Pipeline step id (e.g. extracting, normalizing, policy_check, clinician_agent, payer_agent, scoring). */
+  /** Pipeline step id (e.g. extracting, policy_ingest, mapping, validating, scoring). */
   step?: string;
   stepLabel?: string;
   stepDescription?: string;
+  /** 0–100 from pipeline; use for progress bar when present. */
+  progressPercent?: number;
   result?: ComplianceCheckResponse;
   error?: string;
 }

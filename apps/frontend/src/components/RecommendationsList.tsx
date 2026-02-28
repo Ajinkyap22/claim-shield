@@ -123,7 +123,8 @@ export function RecommendationsList({
             key={rec.id ?? idx}
             className="p-5 hover:bg-slate-50/60 transition-colors duration-200 group"
           >
-            <div className="flex items-start gap-4">
+            {/* Row: number | point (left) | tag + copy (right, no wrap) */}
+            <div className="flex items-start gap-4 flex-nowrap">
               {/* Number */}
               <div
                 className="flex items-center justify-center rounded-full shrink-0 mt-0.5"
@@ -144,102 +145,95 @@ export function RecommendationsList({
                 {idx + 1}
               </div>
 
-              {/* Content */}
+              {/* Point (left): priority + title + detail — can wrap */}
               <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-3 flex-wrap">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span
-                      className="rounded-full px-2.5 py-0.5"
-                      style={{
-                        fontSize: "0.65rem",
-                        fontWeight: 700,
-                        backgroundColor:
-                          rec.priorityColor?.bg ??
-                          defaultPriorityColor(rec.priority).bg,
-                        color:
-                          rec.priorityColor?.text ??
-                          defaultPriorityColor(rec.priority).text,
-                        border: `1px solid ${rec.priorityColor?.border ?? defaultPriorityColor(rec.priority).border}`,
-                        letterSpacing: "0.04em",
-                        textTransform: "uppercase",
-                      }}
-                    >
-                      {rec.priority ?? "Advisory"}
-                    </span>
-                    <p
-                      className="text-slate-800"
-                      style={{ fontSize: "0.875rem", fontWeight: 600 }}
-                    >
-                      {rec.title}
-                    </p>
-                  </div>
-
-                  {/* Citation: prominent, easy to spot */}
-                  <div className="flex items-center gap-4">
-                    <div
-                      className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 shrink-0"
-                      style={{
-                        backgroundColor: "#fffbeb",
-                        border: "1px solid #fde68a",
-                      }}
-                      title={
-                        rec.citationFull
-                          ? formatCitation(rec.citationFull)
-                          : undefined
-                      }
-                    >
-                      <BookOpen className="w-3 h-3 text-amber-500" />
-                      <span
-                        className="font-mono"
-                        style={{
-                          fontSize: "0.72rem",
-                          fontWeight: 700,
-                          color: "#b45309",
-                        }}
-                      >
-                        {formatCitation(rec.citation)}
-                      </span>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleCopyRec(rec, rec.id ?? idx)}
-                      className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 hover:border-slate-300 transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500/25 focus:ring-offset-2 shrink-0"
-                      title="Copy recommendation and citation"
-                      aria-label={
-                        lastCopiedId === (rec.id ?? idx)
-                          ? "Copied"
-                          : "Copy recommendation and citation"
-                      }
-                      style={{ fontSize: "0.72rem" }}
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                      {lastCopiedId === (rec.id ?? idx) ? (
-                        <span className="text-teal-600 font-medium">
-                          Copied
-                        </span>
-                      ) : null}
-                    </button>
-                  </div>
+                <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                  <span
+                    className="rounded-full px-2.5 py-0.5 shrink-0"
+                    style={{
+                      fontSize: "0.65rem",
+                      fontWeight: 700,
+                      backgroundColor:
+                        rec.priorityColor?.bg ??
+                        defaultPriorityColor(rec.priority).bg,
+                      color:
+                        rec.priorityColor?.text ??
+                        defaultPriorityColor(rec.priority).text,
+                      border: `1px solid ${rec.priorityColor?.border ?? defaultPriorityColor(rec.priority).border}`,
+                      letterSpacing: "0.04em",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    {rec.priority ?? "Advisory"}
+                  </span>
+                  <p
+                    className="text-slate-800 break-words"
+                    style={{ fontSize: "0.875rem", fontWeight: 600 }}
+                  >
+                    {rec.title}
+                  </p>
                 </div>
-
                 {rec.detail && (
                   <p
-                    className="text-slate-500 mt-1.5"
+                    className="text-slate-500 break-words"
                     style={{ fontSize: "0.8rem", lineHeight: 1.6 }}
                   >
                     {rec.detail}
                   </p>
                 )}
-
                 {rec.citationFull && (
                   <p
-                    className="text-slate-400 mt-1"
+                    className="text-slate-400 mt-1 break-words"
                     style={{ fontSize: "0.7rem", fontStyle: "italic" }}
                   >
                     {formatCitation(rec.citationFull)}
                   </p>
                 )}
+              </div>
+
+              {/* Tag (citation) + Copy — always right, no wrap */}
+              <div className="flex items-center gap-2 shrink-0">
+                <div
+                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 shrink-0"
+                  style={{
+                    backgroundColor: "#fffbeb",
+                    border: "1px solid #fde68a",
+                  }}
+                  title={
+                    rec.citationFull
+                      ? formatCitation(rec.citationFull)
+                      : undefined
+                  }
+                >
+                  <BookOpen className="w-3 h-3 text-amber-500 shrink-0" />
+                  <span
+                    className="font-mono whitespace-nowrap"
+                    style={{
+                      fontSize: "0.72rem",
+                      fontWeight: 700,
+                      color: "#b45309",
+                    }}
+                  >
+                    {formatCitation(rec.citation)}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCopyRec(rec, rec.id ?? idx)}
+                  className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 hover:border-slate-300 transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500/25 focus:ring-offset-2 shrink-0 whitespace-nowrap"
+                  title="Copy recommendation and citation"
+                  aria-label={
+                    lastCopiedId === (rec.id ?? idx)
+                      ? "Copied"
+                      : "Copy recommendation and citation"
+                  }
+                  style={{ fontSize: "0.72rem" }}
+                >
+                  <Copy className="w-3.5 h-3.5 shrink-0" />
+                  {lastCopiedId === (rec.id ?? idx) ? (
+                    <span className="text-teal-600 font-medium">Copied</span>
+                  ) : null}
+                </button>
               </div>
             </div>
           </div>

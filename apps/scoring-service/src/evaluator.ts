@@ -34,6 +34,7 @@ Respond with ONLY a raw JSON object matching the PayerScoreBreakdown schema exac
 
 
 const PAYER_NAMES: Record<string, string> = {
+  user: "Your uploaded policy",
   uhc: "UnitedHealthcare",
   aetna: "Aetna",
   cigna: "Cigna",

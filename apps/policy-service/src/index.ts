@@ -19,6 +19,7 @@ import {
   unregisterPolicy,
   getPolicyRegistry,
 } from "./pinecone-client.js";
+import { timestamp } from "./logger.js";
 
 const app = express();
 app.use(cors());
@@ -116,7 +117,7 @@ app.post("/policies/ingest", upload.single("file"), async (req, res) => {
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("Ingest error:", message);
+    console.error(`[${timestamp()}] Ingest error:`, message);
     res.status(500).json({ detail: message });
   }
 });
@@ -134,7 +135,7 @@ app.delete("/policies/:policyId", async (req, res) => {
     res.json({ deleted: true, policy_id: policyId });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("Delete error:", message);
+    console.error(`[${timestamp()}] Delete error:`, message);
     res.status(500).json({ detail: message });
   }
 });
@@ -160,11 +161,11 @@ app.post("/policies/search", async (req, res) => {
       return;
     }
     const message = err instanceof Error ? err.message : String(err);
-    console.error("Search error:", message);
+    console.error(`[${timestamp()}] Search error:`, message);
     res.status(500).json({ detail: message });
   }
 });
 
 app.listen(config.port, () => {
-  console.log(`Policy service running on http://localhost:${config.port}`);
+  console.log(`[${timestamp()}] Policy service running on http://localhost:${config.port}`);
 });

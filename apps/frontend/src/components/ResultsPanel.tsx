@@ -23,6 +23,8 @@ import { jsPDF } from "jspdf";
 interface ResultsPanelProps {
   /** When provided (from API), overrides mock data. When null, UI uses internal mocks. */
   result?: ComplianceCheckResponse | null;
+  /** When provided, "Compare with top payers" uses this jobId for the payer-comparison API. */
+  jobId?: string;
   onReset: () => void;
 }
 
@@ -40,7 +42,11 @@ function fadeUp(delay: number = 0) {
 
 const TOP_RECOMMENDATIONS_COPY = 5;
 
-export function ResultsPanel({ result = null, onReset }: ResultsPanelProps) {
+export function ResultsPanel({
+  result = null,
+  jobId,
+  onReset,
+}: ResultsPanelProps) {
   const topRef = useRef<HTMLDivElement>(null);
   const [pdfExporting, setPdfExporting] = useState(false);
   const [copySummaryFeedback, setCopySummaryFeedback] = useState<"idle" | "copied" | "error">("idle");
@@ -240,7 +246,7 @@ export function ResultsPanel({ result = null, onReset }: ResultsPanelProps) {
 
       {/* ── HOW CLAIM STANDS VS TOP US PAYERS (optional; separate request) ── */}
       <motion.div {...fadeUp(0.12)}>
-        <PayerComparisonBlock />
+        <PayerComparisonBlock jobId={jobId} />
       </motion.div>
 
       {/* ── DUAL AGENT VIEW ── */}
