@@ -7,3 +7,4 @@ export * from "./scoring.js";
 export * from "./pipeline.js";
 export * from "./policy.js";
 export * from "./claim-check.js";
+export type { ClinicianFinding, PayerPolicyPoint } from "./claim-check.js";

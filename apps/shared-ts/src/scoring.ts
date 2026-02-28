@@ -12,14 +12,24 @@ export const RuleResultSchema = z.object({
   weight: z.number().min(0).max(1),
   reasoning: z.string(),
   evidence: z.array(z.string()).default([]),
+  /** Policy section reference (e.g. "§ 4.2.1") when rule_id maps to a criterion; set by scoring service. */
+  section_reference: z.string().optional(),
 });
 
 export const PayerScoreBreakdownSchema = z.object({
   payer_id: z.string(),
   payer_name: z.string(),
-  denial_probability: z.number().min(0).max(1),
-  risk_level: z.enum(["low", "medium", "high"]),
-  rules_evaluated: z.array(RuleResultSchema),
+  denial_probability: z
+    .number()
+    .min(0)
+    .max(1)
+    .default(0.5)
+    .catch(0.5),
+  risk_level: z
+    .enum(["low", "medium", "high"])
+    .default("medium")
+    .catch("medium"),
+  rules_evaluated: z.array(RuleResultSchema).default([]),
   recommendations: z.array(z.string()).default([]),
   summary: z.string().default(""),
 });

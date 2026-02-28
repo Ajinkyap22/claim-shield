@@ -32,12 +32,31 @@ export interface PayerComparisonItem {
   note?: string;
 }
 
+/** One finding in the Clinician (Agent A) list view. */
+export interface ClinicianFinding {
+  category: string;
+  text: string;
+  status: "documented" | "gap";
+}
+
+/** One policy point in the Payer (Agent B) list view. */
+export interface PayerPolicyPoint {
+  citation: string;
+  title: string;
+  text: string;
+  severity: "fail" | "warn";
+}
+
 export interface ComplianceCheckResponse {
   score: number;
   scoreExplanation: string;
   claimSummary?: Record<string, unknown>;
   clinicianView?: string;
   payerView?: string;
+  /** List of findings for Two-Agent Clinician view (list format). */
+  clinicianFindings?: ClinicianFinding[];
+  /** List of policy points for Two-Agent Payer view (list format). */
+  payerPolicyPoints?: PayerPolicyPoint[];
   recommendations?: ClaimCheckRecommendation[];
   validationIssues?: ClaimCheckValidationIssue[];
   meta?: ClaimCheckMeta;

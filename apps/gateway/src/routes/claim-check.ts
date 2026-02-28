@@ -83,6 +83,18 @@ router.get("/status", (req: Request, res: Response) => {
     return;
   }
 
+  const policyIngestInProgress = status.stages.find(
+    (s) => s.stage === PipelineStage.POLICY_INGEST,
+  )?.status === "in_progress";
+  const mappingInProgress = status.stages.find(
+    (s) => s.stage === PipelineStage.MAPPING,
+  )?.status === "in_progress";
+  const bothPolicyAndMapping =
+    policyIngestInProgress && mappingInProgress;
+
+  const defaultStepDescription =
+    status.stages.find((s) => s.stage === status.current_stage)?.message ?? "";
+
   const pollStatus: PollStatusResponse = {
     status:
       status.current_stage === PipelineStage.COMPLETED
@@ -91,10 +103,12 @@ router.get("/status", (req: Request, res: Response) => {
           ? "failed"
           : "pending",
     step: status.current_stage,
-    stepLabel: status.current_stage,
-    stepDescription:
-      status.stages.find((s) => s.stage === status.current_stage)?.message ??
-      "",
+    stepLabel: bothPolicyAndMapping
+      ? "Ingesting policy and mapping to codes…"
+      : status.current_stage,
+    stepDescription: bothPolicyAndMapping
+      ? "Ingesting policy and mapping to codes…"
+      : defaultStepDescription,
     progressPercent: status.progress_pct,
     error: status.error ?? undefined,
   };

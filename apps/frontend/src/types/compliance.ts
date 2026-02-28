@@ -21,6 +21,21 @@ export interface ComplianceCheckPayload {
   documentationFiles: File[];
 }
 
+/** One finding in the Clinician (Agent A) list view. */
+export interface ClinicianFinding {
+  category: string;
+  text: string;
+  status: "documented" | "gap";
+}
+
+/** One policy point in the Payer (Agent B) list view. */
+export interface PayerPolicyPoint {
+  citation: string;
+  title: string;
+  text: string;
+  severity: "fail" | "warn";
+}
+
 /**
  * Response from the compliance check API.
  * When the backend contract changes, update this type and the components that consume it.
@@ -37,6 +52,10 @@ export interface ComplianceCheckResponse {
   clinicianView?: string;
   /** Optional: payer agent summary. */
   payerView?: string;
+  /** List of findings for Two-Agent Clinician view (list format). */
+  clinicianFindings?: ClinicianFinding[];
+  /** List of policy points for Two-Agent Payer view (list format). */
+  payerPolicyPoints?: PayerPolicyPoint[];
   /** Policy-cited recommendations. */
   recommendations?: Array<{
     id?: string | number;

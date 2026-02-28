@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, Loader2 } from "lucide-react";
 
 /** One step at a time: title + description for the synchronous loading flow. */
 const DEFAULT_STEPS = [
@@ -53,7 +53,9 @@ export function LoadingState({
 
   const useApiStep = stepLabel != null;
   const useApiProgress = progressPercent != null;
-  const title = useApiStep ? stepLabel : DEFAULT_STEPS[stepIndex % DEFAULT_STEPS.length].label;
+  const title = useApiStep
+    ? stepLabel
+    : DEFAULT_STEPS[stepIndex % DEFAULT_STEPS.length].label;
   const description = useApiStep
     ? (stepDescription ?? "")
     : DEFAULT_STEPS[stepIndex % DEFAULT_STEPS.length].description;
@@ -66,6 +68,10 @@ export function LoadingState({
     return () => clearInterval(id);
   }, [useApiStep]);
 
+  const displayPercent = useApiProgress
+    ? Math.min(100, Math.max(0, Math.round(progressPercent ?? 0)))
+    : null;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -73,26 +79,44 @@ export function LoadingState({
       transition={{ duration: 0.45, ease: easeSmooth }}
       className="flex flex-col items-center justify-center py-16 px-6"
     >
-      {/* Big loading indicator */}
-      <div className="relative mb-10">
-        <motion.div
-          initial={{ scale: 0.92, opacity: 0.8 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 0.5, ease: easeSmooth }}
-          className="flex items-center justify-center rounded-2xl w-24 h-24"
-          style={{
-            background: "linear-gradient(135deg, var(--navy-900) 0%, var(--navy-700) 100%)",
-            boxShadow: "var(--shadow-glow-teal), 0 8px 24px rgba(15, 39, 68, 0.15)",
-          }}
-        >
-          <ShieldCheck className="w-11 h-11 text-teal-400" />
-        </motion.div>
-        <motion.div
-          className="absolute -inset-3 rounded-3xl border-2 border-teal-400/25"
-          animate={{ scale: [1, 1.08, 1], opacity: [0.4, 0, 0.4] }}
-          transition={{ duration: 2, repeat: Infinity, ease: "easeOut" }}
-        />
+      {/* Prominent spinner + shield */}
+      <div className="relative mb-8 flex items-center justify-center">
+        <div className="relative flex items-center justify-center">
+          <motion.div
+            initial={{ scale: 0.92, opacity: 0.8 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.5, ease: easeSmooth }}
+            className="flex items-center justify-center rounded-2xl w-24 h-24 z-10"
+            style={{
+              background:
+                "linear-gradient(135deg, var(--navy-900) 0%, var(--navy-700) 100%)",
+              boxShadow:
+                "var(--shadow-glow-teal), 0 8px 24px rgba(15, 39, 68, 0.15)",
+            }}
+          >
+            <ShieldCheck className="w-11 h-11 text-teal-400" />
+          </motion.div>
+          {/* Large visible spinning ring around the icon */}
+          <Loader2
+            className="absolute w-32 h-32 text-teal-500/70 animate-spin -z-[1]"
+            strokeWidth={2}
+            aria-hidden
+          />
+        </div>
       </div>
+
+      {/* "Analyzing your claim" label so it's obvious we're loading */}
+      <p
+        className="text-[var(--body-text-muted)] text-center mb-1"
+        style={{
+          fontSize: "0.8rem",
+          fontWeight: 600,
+          textTransform: "uppercase",
+          letterSpacing: "0.06em",
+        }}
+      >
+        Analyzing your claim
+      </p>
 
       <AnimatePresence mode="wait">
         <motion.div
@@ -118,23 +142,30 @@ export function LoadingState({
         </motion.div>
       </AnimatePresence>
 
-      {/* Bouncing dots under the text */}
-      <div className="flex gap-1.5 mt-8">
-        {[0, 0.15, 0.3].map((d) => (
-          <span
-            key={d}
-            className="w-2 h-2 rounded-full bg-teal-500 animate-bounce"
-            style={{ animationDelay: `${d}s` }}
-          />
-        ))}
-      </div>
-
       {/* Progress bar: driven by pipeline progress when available, else time-based */}
-      <div className="w-full max-w-sm mt-10">
-        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+      <div className="w-full max-w-sm mt-8">
+        <div className="flex items-center justify-between gap-2 mb-1.5">
+          <span
+            className="text-[var(--body-text-muted)]"
+            style={{ fontSize: "0.75rem", fontWeight: 500 }}
+          >
+            {useApiProgress ? "Pipeline progress" : "Loading"}
+          </span>
+          {displayPercent != null && (
+            <span
+              className="text-teal-600 font-mono font-semibold"
+              style={{ fontSize: "0.8rem" }}
+            >
+              {displayPercent}%
+            </span>
+          )}
+        </div>
+        <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden">
           <motion.div
             className="h-full rounded-full"
-            style={{ background: "linear-gradient(90deg, var(--teal-600), #1d4ed8)" }}
+            style={{
+              background: "linear-gradient(90deg, var(--teal-600), #1d4ed8)",
+            }}
             initial={false}
             animate={{
               width: useApiProgress
@@ -148,8 +179,13 @@ export function LoadingState({
             }
           />
         </div>
-        <p className="text-center text-[var(--body-text-muted)] mt-2" style={{ fontSize: "0.7rem" }}>
-          {useApiProgress ? "Pipeline in progress…" : "Typically completes in a few seconds"}
+        <p
+          className="text-center text-[var(--body-text-muted)] mt-2"
+          style={{ fontSize: "0.7rem" }}
+        >
+          {useApiProgress
+            ? "This may take a minute. Please wait."
+            : "Typically completes in a few seconds"}
         </p>
       </div>
     </motion.div>

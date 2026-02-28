@@ -4,5 +4,6 @@ export const config = {
   openrouterModel: process.env.OPENROUTER_MODEL || "anthropic/claude-haiku-4.5",
   pineconeApiKey: process.env.PINECONE_API_KEY || "",
   pineconeIndexName: process.env.PINECONE_INDEX_NAME_POLICIES || "claim-shield-policies",
-  chunkBatchSize: parseInt(process.env.CHUNK_BATCH_SIZE || "4"),
+  chunkBatchSize: parseInt(process.env.CHUNK_BATCH_SIZE || "5"),
+  maxConcurrentBatches: parseInt(process.env.MAX_CONCURRENT_BATCHES || "5"),
 };

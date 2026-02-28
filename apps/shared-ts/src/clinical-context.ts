@@ -84,7 +84,12 @@ export const ClinicalIndicatorFactsSchema = z.object({
     .default(null),
   functional_limitation: z.boolean().default(false),
 
-  red_flags_present: z.array(z.string()).default([]),
+  red_flags_present: z
+    .union([
+      z.array(z.string()),
+      z.boolean().transform((b) => (b ? [] : [])),
+    ])
+    .default([]),
 });
 
 export const DocumentationQualityFactsSchema = z.object({
@@ -99,8 +104,8 @@ export const DocumentationQualityFactsSchema = z.object({
 // -- Top-level ClinicalContext --
 
 export const ClinicalContextSchema = z.object({
-  procedure_category: z.string(),
-  body_region: z.string(),
+  procedure_category: z.string().default("other"),
+  body_region: z.string().default("other"),
 
   conservative_treatment: ConservativeTreatmentFactsSchema,
   neurological_exam: NeurologicalExamFactsSchema,

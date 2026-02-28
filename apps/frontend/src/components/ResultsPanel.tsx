@@ -260,7 +260,7 @@ export function ResultsPanel({
           </span>
           <div className="flex-1 h-px bg-slate-200/80" />
         </div>
-        <DualAgentView clinicianView={result?.clinicianView} payerView={result?.payerView} />
+        <DualAgentView clinicianFindings={result?.clinicianFindings} payerPolicyPoints={result?.payerPolicyPoints} />
       </motion.div>
 
       {/* ── RECOMMENDATIONS ── */}

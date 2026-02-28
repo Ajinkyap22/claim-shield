@@ -1,7 +1,8 @@
 import { Stethoscope, FileSearch, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import { formatCitation } from "@/lib/formatCitation";
+import type { ClinicianFinding, PayerPolicyPoint } from "@/types/compliance";
 
-const clinicianFindings = [
+const MOCK_CLINICIAN_FINDINGS: ClinicianFinding[] = [
   {
     category: "Chief Complaint",
     text: "Severe right knee pain with complete loss of functional mobility. ROM 15°–95°, bone-on-bone on imaging.",
@@ -29,7 +30,7 @@ const clinicianFindings = [
   },
 ];
 
-const payerPolicyPoints = [
+const MOCK_PAYER_POLICY_POINTS: PayerPolicyPoint[] = [
   {
     citation: "§ 4.2.1",
     title: "Prior Authorization Required",
@@ -71,14 +72,15 @@ const severityIcon = (s: "fail" | "warn") =>
   );
 
 interface DualAgentViewProps {
-  /** When provided from API, shown as clinician summary; else mock structured view. */
-  clinicianView?: string | null;
-  /** When provided from API, shown as payer summary; else mock structured view. */
-  payerView?: string | null;
+  /** List of findings from API for Clinician (Agent A) list view. When present, list is always used. */
+  clinicianFindings?: ClinicianFinding[] | null;
+  /** List of policy points from API for Payer (Agent B) list view. When present, list is always used. */
+  payerPolicyPoints?: PayerPolicyPoint[] | null;
 }
 
-export function DualAgentView({ clinicianView, payerView }: DualAgentViewProps) {
-  const useApiSummaries = Boolean(clinicianView ?? payerView);
+export function DualAgentView({ clinicianFindings: apiClinicianFindings, payerPolicyPoints: apiPayerPolicyPoints }: DualAgentViewProps) {
+  const clinicianList = apiClinicianFindings != null ? apiClinicianFindings : MOCK_CLINICIAN_FINDINGS;
+  const payerList = apiPayerPolicyPoints != null ? apiPayerPolicyPoints : MOCK_PAYER_POLICY_POINTS;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -111,13 +113,8 @@ export function DualAgentView({ clinicianView, payerView }: DualAgentViewProps) 
           </div>
         </div>
         <div className="bg-blue-50 p-4 space-y-3">
-          {useApiSummaries && clinicianView ? (
-            <div className="bg-white rounded-lg p-3.5 border border-blue-100 shadow-xs">
-              <p className="text-slate-700" style={{ fontSize: "0.875rem", lineHeight: 1.55 }}>{clinicianView}</p>
-            </div>
-          ) : (
-            clinicianFindings.map((f) => (
-              <div key={f.category} className="bg-white rounded-lg p-3.5 border border-blue-100 shadow-xs">
+          {clinicianList.map((f, i) => (
+              <div key={`clinician-${i}`} className="bg-white rounded-lg p-3.5 border border-blue-100 shadow-xs">
                 <div className="flex items-start gap-2">
                   {statusIcon(f.status as "documented" | "gap")}
                   <div className="min-w-0">
@@ -141,8 +138,7 @@ export function DualAgentView({ clinicianView, payerView }: DualAgentViewProps) 
                   </div>
                 </div>
               </div>
-            ))
-          )}
+            ))}
         </div>
       </div>
 
@@ -175,13 +171,8 @@ export function DualAgentView({ clinicianView, payerView }: DualAgentViewProps) 
           </div>
         </div>
         <div className="bg-amber-50 p-4 space-y-3">
-          {useApiSummaries && payerView ? (
-            <div className="bg-white rounded-lg p-3.5 border border-amber-100 shadow-xs">
-              <p className="text-slate-700" style={{ fontSize: "0.875rem", lineHeight: 1.55 }}>{payerView}</p>
-            </div>
-          ) : (
-            payerPolicyPoints.map((p) => (
-              <div key={p.citation} className="bg-white rounded-lg p-3.5 border border-amber-100 shadow-xs">
+          {payerList.map((p, i) => (
+              <div key={`payer-${i}`} className="bg-white rounded-lg p-3.5 border border-amber-100 shadow-xs">
                 <div className="flex items-start gap-2">
                   {severityIcon(p.severity as "fail" | "warn")}
                   <div className="min-w-0">
@@ -219,8 +210,7 @@ export function DualAgentView({ clinicianView, payerView }: DualAgentViewProps) 
                   </div>
                 </div>
               </div>
-            ))
-          )}
+            ))}
         </div>
       </div>
     </div>

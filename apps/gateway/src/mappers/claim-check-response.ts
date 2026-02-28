@@ -4,7 +4,24 @@ import type {
   PayerComparisonItem,
   ClaimCheckRecommendation,
   ClaimCheckValidationIssue,
+  ClinicianFinding,
+  PayerPolicyPoint,
 } from "@compliance-shield/shared";
+
+/** Strip internal field paths and technical phrasing from LLM output for provider-facing display. Keeps codes (CPT, ICD-10). */
+function sanitizeForDisplay(text: string): string {
+  if (!text?.trim()) return text ?? "";
+  let out = text
+    .replace(/\bclinical_context\.\w+(\.\w+)*\s*=\s*[^\s.]+\s*/gi, " ")
+    .replace(/\bvalidation_result\.\w+(\.\w+)*\s*=\s*[^\s.]+\s*/gi, " ")
+    .replace(/\bsupporting_info\.\w+\s*/gi, " ")
+    .replace(/\s*=\s*(?:false|true|null|'fail'|'pass'|"fail"|"pass")\s*/gi, " ")
+    .replace(/\b(?:status|findings|confidence)\s*=\s*[^\s,.]+\s*/gi, " ")
+    .replace(/\bwith\s+confidence\s+[\d.]+/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return out || text.trim();
+}
 
 export function mapPipelineResultToComplianceCheckResponse(
   result: PipelineResult
@@ -18,11 +35,16 @@ export function mapPipelineResultToComplianceCheckResponse(
   const score = firstPayer
     ? Math.round(firstPayer.denial_probability * 100)
     : 0;
-  const scoreExplanation = firstPayer?.summary ?? "No payer scores available.";
+  const scoreExplanation = sanitizeForDisplay(firstPayer?.summary ?? "No payer scores available.");
 
   const claimSummary = buildClaimSummary(result.claim_bundle);
   const clinicianView = buildClinicianView(result.clinical_context);
-  const payerView = firstPayer?.summary ?? "";
+  const payerView = sanitizeForDisplay(firstPayer?.summary ?? "");
+  const clinicianFindings = buildClinicianFindings(
+    result.clinical_context,
+    result.validation_result,
+  );
+  const payerPolicyPoints = buildPayerPolicyPoints(firstPayer?.rules_evaluated ?? []);
 
   const recommendations = buildRecommendations(result, firstPayerId);
   const validationIssues = buildValidationIssues(result.validation_result);
@@ -46,7 +68,7 @@ export function mapPipelineResultToComplianceCheckResponse(
           : p.risk_level === "high"
             ? "Review needed"
             : "Review needed",
-      note: p.summary || undefined,
+      note: p.summary ? sanitizeForDisplay(p.summary) : undefined,
     };
   });
 
@@ -56,6 +78,8 @@ export function mapPipelineResultToComplianceCheckResponse(
     claimSummary,
     clinicianView,
     payerView,
+    clinicianFindings,
+    payerPolicyPoints,
     recommendations,
     validationIssues,
     meta,
@@ -100,6 +124,121 @@ function buildClinicianView(context: PipelineResult["clinical_context"]): string
   return parts.length > 0 ? parts.join(". ") : "Clinical context extracted.";
 }
 
+function buildClinicianFindings(
+  context: PipelineResult["clinical_context"],
+  vr: PipelineResult["validation_result"],
+): ClinicianFinding[] {
+  const findings: ClinicianFinding[] = [];
+  const isGap = (status: string) => status === "fail" || status === "pass_with_findings";
+
+  // Procedure / Region
+  const procText =
+    context.procedure_category && context.procedure_category !== "other"
+      ? `${context.procedure_category} (${context.body_region ?? "region not specified"})`
+      : context.body_region
+        ? `Body region: ${context.body_region}`
+        : "Procedure/region not specified.";
+  findings.push({
+    category: "Procedure / Region",
+    text: procText,
+    status: context.procedure_category && context.body_region ? "documented" : "gap",
+  });
+
+  // Conservative treatment
+  const ct = context.conservative_treatment;
+  const ctParts: string[] = [];
+  if (ct.physical_therapy_completed && ct.total_conservative_weeks != null) {
+    ctParts.push(`${ct.total_conservative_weeks} weeks PT`);
+  }
+  if (ct.nsaid_trial) ctParts.push("NSAID trial");
+  if (ct.muscle_relaxant_trial) ctParts.push("muscle relaxant trial");
+  if (ct.activity_modification) ctParts.push("activity modification");
+  if (ct.treatments_tried?.length) ctParts.push(ct.treatments_tried.join(", "));
+  const ctText =
+    ctParts.length > 0
+      ? ctParts.join(". ")
+      : "No conservative treatment documented.";
+  findings.push({
+    category: "Conservative Treatment",
+    text: ctText,
+    status: isGap(vr.step_therapy.status) ? "gap" : ctParts.length > 0 ? "documented" : "gap",
+  });
+
+  // Neurological exam
+  const ne = context.neurological_exam;
+  const neText =
+    ne.exam_completeness === "full"
+      ? "Full neurological exam documented (SLR, motor, sensory, reflex)."
+      : ne.exam_completeness === "partial"
+        ? "Partial neurological exam documented."
+        : "Neurological exam not documented or absent.";
+  findings.push({
+    category: "Neurological Exam",
+    text: neText,
+    status: ne.exam_completeness !== "absent" ? "documented" : "gap",
+  });
+
+  // Imaging history
+  const ih = context.imaging_history;
+  const ihParts: string[] = [];
+  if (ih.prior_mri) ihParts.push("prior MRI");
+  if (ih.prior_xray) ihParts.push("prior X-ray");
+  if (ih.prior_ct) ihParts.push("prior CT");
+  if (ih.prior_imaging_modalities?.length) ihParts.push(ih.prior_imaging_modalities.join(", "));
+  const ihText =
+    ihParts.length > 0 ? ihParts.join("; ") : "No prior imaging documented.";
+  findings.push({
+    category: "Imaging",
+    text: ihText,
+    status: ihParts.length > 0 ? "documented" : "gap",
+  });
+
+  // Medical necessity (from validation)
+  findings.push({
+    category: "Medical Necessity",
+    text: sanitizeForDisplay(vr.medical_necessity.findings || "Medical necessity not assessed."),
+    status: isGap(vr.medical_necessity.status) ? "gap" : "documented",
+  });
+
+  // Step therapy (from validation)
+  findings.push({
+    category: "Step Therapy",
+    text: sanitizeForDisplay(vr.step_therapy.findings || "Step therapy requirements not assessed."),
+    status: isGap(vr.step_therapy.status) ? "gap" : "documented",
+  });
+
+  // Documentation (from validation + missing_elements)
+  const dq = context.documentation_quality;
+  const missingStr =
+    dq.missing_elements?.length > 0
+      ? ` Missing: ${dq.missing_elements.join(", ")}.`
+      : "";
+  findings.push({
+    category: "Documentation",
+    text: sanitizeForDisplay((vr.documentation.findings || "Documentation not assessed.") + missingStr),
+    status: isGap(vr.documentation.status) || (dq.missing_elements?.length ?? 0) > 0 ? "gap" : "documented",
+  });
+
+  return findings;
+}
+
+function buildPayerPolicyPoints(
+  rules: Array<{ rule_id: string; description: string; reasoning: string; evidence?: string[]; passed: boolean; section_reference?: string }>,
+): PayerPolicyPoint[] {
+  const points: PayerPolicyPoint[] = [];
+  for (const rule of rules) {
+    const citation = rule.section_reference ?? rule.rule_id;
+    const rawText = rule.reasoning + (rule.evidence?.length ? ` ${rule.evidence.join(" ")}` : "");
+    points.push({
+      citation,
+      title: sanitizeForDisplay(rule.description),
+      text: sanitizeForDisplay(rawText),
+      severity: rule.passed ? "warn" : "fail",
+    });
+  }
+  return points;
+}
+
 function buildRecommendations(
   result: PipelineResult,
   firstPayerId: string | undefined
@@ -113,7 +252,13 @@ function buildRecommendations(
     citation: string,
     priority?: string
   ) => {
-    recs.push({ id: id++, title, detail, citation, priority });
+    recs.push({
+      id: id++,
+      title: sanitizeForDisplay(title),
+      detail: detail ? sanitizeForDisplay(detail) : undefined,
+      citation,
+      priority,
+    });
   };
 
   const vr = result.validation_result;
@@ -159,8 +304,9 @@ function buildValidationIssues(
   ) => {
     const type: "error" | "warn" | "info" =
       status === "fail" ? "error" : status === "pass_with_findings" ? "warn" : "info";
-    if (findings?.trim()) {
-      issues.push({ type, code: category, title: category, detail: findings });
+    const detail = findings?.trim() ? sanitizeForDisplay(findings) : "";
+    if (detail) {
+      issues.push({ type, code: category, title: category, detail });
     }
   };
   add("medical_necessity", vr.medical_necessity.findings, vr.medical_necessity.status);

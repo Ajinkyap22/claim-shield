@@ -39,7 +39,9 @@ function LiveAudioVisualizer({ stream }: { stream: MediaStream }) {
     const draw = () => {
       analyser.getByteFrequencyData(data);
       ctx2d.clearRect(0, 0, canvas.width, canvas.height);
-      const barW = 3, gap = 2, step = barW + gap;
+      const barW = 3,
+        gap = 2,
+        step = barW + gap;
       const count = Math.floor(canvas.width / step);
       for (let i = 0; i < count; i++) {
         const val = data[Math.floor((i * data.length) / count)] / 255;
@@ -58,11 +60,24 @@ function LiveAudioVisualizer({ stream }: { stream: MediaStream }) {
     };
   }, [stream]);
 
-  return <canvas ref={canvasRef} width={260} height={32} style={{ display: "block" }} />;
+  return (
+    <canvas
+      ref={canvasRef}
+      width={260}
+      height={32}
+      style={{ display: "block" }}
+    />
+  );
 }
 
 /** Static waveform from a recorded/uploaded blob with played-progress highlight. */
-function AudioVisualizer({ blob, currentTime }: { blob: Blob; currentTime: number }) {
+function AudioVisualizer({
+  blob,
+  currentTime,
+}: {
+  blob: Blob;
+  currentTime: number;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pcmRef = useRef<Float32Array | null>(null);
   const durationRef = useRef(0);
@@ -82,15 +97,29 @@ function AudioVisualizer({ blob, currentTime }: { blob: Blob; currentTime: numbe
         drawWaveform(canvasRef.current, pcmRef.current, durationRef.current, 0);
       });
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [blob]);
 
   // Repaint whenever currentTime changes
   useEffect(() => {
-    drawWaveform(canvasRef.current, pcmRef.current, durationRef.current, currentTime);
+    drawWaveform(
+      canvasRef.current,
+      pcmRef.current,
+      durationRef.current,
+      currentTime,
+    );
   }, [currentTime]);
 
-  return <canvas ref={canvasRef} width={200} height={32} style={{ display: "block" }} />;
+  return (
+    <canvas
+      ref={canvasRef}
+      width={200}
+      height={32}
+      style={{ display: "block" }}
+    />
+  );
 }
 
 function drawWaveform(
@@ -104,7 +133,9 @@ function drawWaveform(
   if (!ctx) return;
   const { width, height } = canvas;
   ctx.clearRect(0, 0, width, height);
-  const barW = 3, gap = 2, step = barW + gap;
+  const barW = 3,
+    gap = 2,
+    step = barW + gap;
   const count = Math.floor(width / step);
   const samplesPerBar = Math.floor(pcm.length / count);
   const playedFrac = duration > 0 ? currentTime / duration : 0;
@@ -245,7 +276,9 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
   const audioFileRef = useRef<HTMLInputElement>(null);
   const policyFileRef = useRef<HTMLInputElement>(null);
   const docImageFileRef = useRef<HTMLInputElement>(null);
-  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(
+    null,
+  );
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
@@ -403,15 +436,15 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
     setDocImageFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const canSubmit =
-    (note.trim().length > 20 || audioFiles.length > 0) && !loading;
+  const hasClaimInput = note.trim().length > 20 || audioFiles.length > 0;
+  const hasPolicy = policyFiles.length > 0;
+  const canSubmit = hasClaimInput && hasPolicy && !loading;
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Enter" || (!e.ctrlKey && !e.metaKey)) return;
       e.preventDefault();
-      if (!((note.trim().length > 20 || audioFiles.length > 0) && !loading))
-        return;
+      if (!(hasClaimInput && hasPolicy && !loading)) return;
       onSubmit({
         clinicalNote: note,
         audioFiles: [...audioFiles],
@@ -421,7 +454,16 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [note, audioFiles, policyFiles, docImageFiles, loading, onSubmit]);
+  }, [
+    note,
+    audioFiles,
+    policyFiles,
+    docImageFiles,
+    loading,
+    onSubmit,
+    hasClaimInput,
+    hasPolicy,
+  ]);
 
   const formatTime = (s: number) =>
     `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
@@ -685,7 +727,9 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
                       <div className="flex-1 min-w-0 flex items-center w-full">
                         <AudioVisualizer
                           blob={file}
-                          currentTime={playingIndex === i ? currentAudioTime : 0}
+                          currentTime={
+                            playingIndex === i ? currentAudioTime : 0
+                          }
                         />
                       </div>
                     </div>
@@ -722,6 +766,12 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
                 style={{ fontSize: "0.9rem", fontWeight: 600 }}
               >
                 Payer Policy
+              </span>
+              <span
+                className="text-red-500 ml-0.5"
+                style={{ fontSize: "0.75rem" }}
+              >
+                *
               </span>
               <span
                 className="text-slate-400 ml-1"
@@ -772,12 +822,6 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
               </ul>
             )}
 
-            {policyFiles.length === 0 && (
-              <p className="text-slate-400 mt-2" style={{ fontSize: "0.7rem" }}>
-                Uses default BlueCross policy if omitted
-              </p>
-            )}
-
             <input
               ref={policyFileRef}
               type="file"
@@ -826,12 +870,17 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
             </>
           )}
         </button>
-        {note.trim().length <= 20 && !audioFiles.length && (
+        {!hasClaimInput && (
           <p className="text-slate-400" style={{ fontSize: "0.75rem" }}>
             Add claim documentation or attach audio to continue
           </p>
         )}
-        {note.trim() && !loading && (
+        {hasClaimInput && !hasPolicy && (
+          <p className="text-amber-600" style={{ fontSize: "0.75rem" }}>
+            Upload a payer policy PDF to run the check
+          </p>
+        )}
+        {hasClaimInput && hasPolicy && !loading && (
           <p className="text-slate-400" style={{ fontSize: "0.75rem" }}>
             Checks against payer policy · No data stored
           </p>

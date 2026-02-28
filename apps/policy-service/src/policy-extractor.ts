@@ -70,8 +70,6 @@ const ExtractedCriteriaSchema = z.object({
   ),
 });
 
-const MAX_CONCURRENT = 3;
-
 /** Keywords that indicate boilerplate / non-clinical content */
 const BOILERPLATE_KEYWORDS = [
   "table of contents",
@@ -104,8 +102,9 @@ export async function extractCriteriaFromChunks(
 
   // Process batches with limited concurrency
   const allCriteria: PolicyCriterion[] = [];
-  for (let i = 0; i < batches.length; i += MAX_CONCURRENT) {
-    const concurrentBatches = batches.slice(i, i + MAX_CONCURRENT);
+  const maxConcurrent = config.maxConcurrentBatches;
+  for (let i = 0; i < batches.length; i += maxConcurrent) {
+    const concurrentBatches = batches.slice(i, i + maxConcurrent);
     const results = await Promise.all(
       concurrentBatches.map((batch) =>
         extractFromBatch(batch, metadata, policyId)

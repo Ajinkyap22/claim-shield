@@ -101,5 +101,14 @@ export async function extractClinicalContext(
   });
 
   const raw = JSON.parse(stripCodeFences(response.choices[0].message.content!));
+
+  // Guard: LLM sometimes returns clinical_indicators.red_flags_present as boolean
+  if (raw?.clinical_indicators && typeof raw.clinical_indicators === "object") {
+    const rfp = raw.clinical_indicators.red_flags_present;
+    if (typeof rfp === "boolean") {
+      raw.clinical_indicators.red_flags_present = [];
+    }
+  }
+
   return ClinicalContextSchema.parse(raw);
 }

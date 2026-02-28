@@ -75,41 +75,49 @@ export async function runPipeline(input: PipelineInput): Promise<void> {
       extracted,
     );
 
-    // Stage 2: Policy ingest — send extracted policy text to policy service
+    // Stage 2 & 3: Policy ingest and mapping run in parallel (neither depends on the other)
+    const policyFilesToIngest = (extracted.policyFiles ?? []).filter(
+      (f) => f.text?.trim() && !f.error,
+    );
+    const hasPolicyFiles = policyFilesToIngest.length > 0;
+
     advanceStage(
       pipelineId,
       PipelineStage.POLICY_INGEST,
       "Sending policy data to policy service...",
     );
-    const policyIngestResults = await callPolicyIngest(
-      extracted.policyFiles ?? [],
+    advanceStage(
+      pipelineId,
+      PipelineStage.MAPPING,
+      "Mapping to ICD-10 / CPT codes...",
     );
+
+    let policyIngestResults: Awaited<ReturnType<typeof callPolicyIngest>>;
+    let bundle: ClaimBundle;
+
+    if (hasPolicyFiles) {
+      [policyIngestResults, bundle] = await Promise.all([
+        callPolicyIngest(extracted.policyFiles ?? []),
+        callProcess(rawText),
+      ]);
+      if (policyIngestResults.length === 0) {
+        failPipeline(
+          pipelineId,
+          "Policy ingest produced no results; cannot proceed to mapping.",
+        );
+        return;
+      }
+    } else {
+      policyIngestResults = [];
+      bundle = await callProcess(rawText);
+    }
+
     completeStage(
       pipelineId,
       PipelineStage.POLICY_INGEST,
       `Ingested ${policyIngestResults.length} policy document(s)`,
       policyIngestResults,
     );
-
-    // Only proceed to mapping when policy ingest succeeded (callPolicyIngest throws on any failure)
-    const policyFilesToIngest = (extracted.policyFiles ?? []).filter(
-      (f) => f.text?.trim() && !f.error,
-    );
-    if (policyFilesToIngest.length > 0 && policyIngestResults.length === 0) {
-      failPipeline(
-        pipelineId,
-        "Policy ingest produced no results; cannot proceed to mapping.",
-      );
-      return;
-    }
-
-    // Stage 3 & 4: Mapping + bundle via single /process call (data-extraction-pipe returns FHIR bundle)
-    advanceStage(
-      pipelineId,
-      PipelineStage.MAPPING,
-      "Mapping to ICD-10 / CPT codes...",
-    );
-    const bundle = await callProcess(rawText);
     const mappingCount =
       bundle.conditions.length + bundle.procedures.length;
     completeStage(

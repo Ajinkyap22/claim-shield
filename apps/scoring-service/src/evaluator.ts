@@ -25,9 +25,20 @@ Rules:
 - weight: how important this criterion is for the denial decision. Core requirements like medical necessity and step therapy should be 0.2-0.3. Documentation should be 0.15-0.2. Coding specificity should be 0.05-0.1.
 - denial_probability: the overall likelihood the payer would deny this claim, from 0.0 (certain approval) to 1.0 (certain denial). This should reflect the weighted evaluation of all criteria.
 - risk_level: "low" if denial_probability < 0.35, "medium" if < 0.65, "high" if >= 0.65.
-- recommendations: actionable steps to improve the claim, only for criteria that were not fully met.
-- summary: a 1-2 sentence overview of the evaluation.
-- Be specific in reasoning and evidence. Reference actual clinical facts from the context.
+- recommendations: short, actionable steps to improve the claim; include CPT/ICD-10 codes when relevant. Only for criteria not fully met.
+- summary: 1-2 short, provider-facing sentences. No internal field names or technical paths.
+
+Length limits (strict — keep UI readable):
+- reasoning: One sentence only, max 25 words. State whether the criterion is met or not and the single main reason. No paragraphs.
+- evidence: If used, 1-3 short phrases max (e.g. "PT not documented"; "CPT 97110 missing modifier"). No full sentences.
+- description: One short line (e.g. "Step therapy: PT required"). Max 15 words.
+- recommendations: One short line per item. Max 20 words each.
+- summary: Max 2 sentences.
+
+Display rules (required for reasoning, evidence, recommendations, summary):
+- Use brief, plain-language for providers. Mention specific codes (e.g. CPT 97110, ICD-10 M54.5) when relevant.
+- Do NOT use internal field names or technical paths (no clinical_context., validation_result., supporting_info., = false, = 'fail', = null, etc.). Write as if explaining to a billing or clinical staff.
+
 - If no policy criteria are provided for a payer, return a denial_probability of 0.5 with a note that no specific policies were found.
 
 Respond with ONLY a raw JSON object matching the PayerScoreBreakdown schema exactly. No markdown, no code fences, no explanation — just valid JSON.`;
@@ -143,7 +154,7 @@ export async function scoreForPayer(
   const parsed = JSON.parse(rawResponse);
   // Do not log LLM response content: may contain claim/clinical details (PHI)
 
-  // Normalize: LLM sometimes uses alternative field names
+  // Normalize: LLM sometimes uses alternative field names or omits required fields
   if (!parsed.rules_evaluated) {
     parsed.rules_evaluated =
       parsed.rules || parsed.criteria_evaluations || parsed.evaluations || [];
@@ -151,10 +162,34 @@ export async function scoreForPayer(
   if (!parsed.payer_id) parsed.payer_id = payerId;
   if (!parsed.payer_name) parsed.payer_name = payerName;
 
+  const num = Number(parsed.denial_probability);
+  if (typeof parsed.denial_probability !== "number" || !Number.isFinite(num)) {
+    parsed.denial_probability = 0.5;
+  } else {
+    parsed.denial_probability = Math.max(0, Math.min(1, num));
+  }
+  const validRiskLevels = ["low", "medium", "high"] as const;
+  if (
+    !validRiskLevels.includes(parsed.risk_level) ||
+    typeof parsed.risk_level !== "string"
+  ) {
+    parsed.risk_level =
+      parsed.denial_probability < 0.35
+        ? "low"
+        : parsed.denial_probability < 0.65
+          ? "medium"
+          : "high";
+  }
+
   // Normalize individual rule fields: LLM sometimes returns evidence as a string
+  const criteriaById = new Map(criteria.map((c) => [c.criterion_id, c]));
   for (const rule of parsed.rules_evaluated) {
     if (typeof rule.evidence === "string") {
       rule.evidence = rule.evidence ? [rule.evidence] : [];
+    }
+    const criterion = criteriaById.get(rule.rule_id);
+    if (criterion?.section_reference) {
+      rule.section_reference = criterion.section_reference;
     }
   }
 

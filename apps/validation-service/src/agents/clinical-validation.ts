@@ -95,7 +95,13 @@ async function llmCheck(
   systemPrompt: string,
   bundle: ClaimBundle
 ): Promise<CheckResult> {
-  const fullPrompt = systemPrompt + `\n\nIMPORTANT: Respond with ONLY raw JSON (no markdown, no code fences). Use this exact schema:
+  const fullPrompt = systemPrompt + `
+
+Display rules (required):
+- findings: 1-2 short, plain-language sentences for providers. Include CPT or ICD-10 codes when relevant (e.g. "CPT 97110", "M54.5"). Do NOT use internal field names (no clinical_context., validation_result., = false, = 'fail', etc.).
+- recommendations: short actionable items; include codes when relevant. Same plain-language rule.
+
+IMPORTANT: Respond with ONLY raw JSON (no markdown, no code fences). Use this exact schema:
 {"status": "pass"|"pass_with_findings"|"fail", "confidence": number, "findings": "string", "evidence": ["string"], "recommendations": ["string"]}`;
 
   const summary = bundleSummary(bundle);
@@ -128,7 +134,7 @@ Medical necessity is NOT supported by:
 - Acute pain without red flags (< 4 weeks)
 - No documented functional limitation
 
-Return your assessment as structured JSON.`,
+Write findings and recommendations in brief, provider-facing language. Mention specific codes (e.g. CPT, ICD-10) when relevant.`,
     bundle
   );
 }
@@ -149,8 +155,7 @@ Exceptions that bypass step therapy:
 - Progressive neurological deficit
 - Red flag symptoms (fever, weight loss, history of cancer)
 
-Assess duration, type, and adequacy of conservative treatment documented.
-Return your assessment as structured JSON.`,
+Write findings and recommendations in brief, provider-facing language. Mention specific codes (e.g. CPT, ICD-10) when relevant.`,
     bundle
   );
 }
@@ -175,8 +180,7 @@ Helpful but not always required:
 - Functional limitations
 - Pain scale rating
 
-Flag any missing documentation that could lead to denial.
-Return your assessment as structured JSON.`,
+Write findings and recommendations in brief, provider-facing language. Mention specific codes (e.g. CPT, ICD-10) when relevant.`,
     bundle
   );
 }
