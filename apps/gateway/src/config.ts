@@ -1,7 +1,7 @@
 export const config = {
   port: parseInt(process.env.PORT || "8000"),
-  extractionServiceUrl:
-    process.env.EXTRACTION_SERVICE_URL || "http://localhost:8001",
+  extractFileServiceUrl:
+    process.env.EXTRACT_FILE_SERVICE_URL || "http://localhost:8080",
   mappingServiceUrl: process.env.MAPPING_SERVICE_URL || "http://localhost:8002",
   validationServiceUrl:
     process.env.VALIDATION_SERVICE_URL || "http://localhost:8003",

@@ -22,7 +22,7 @@ const outfit = Outfit({
 export const metadata: Metadata = {
   title: "Compliance Shield - Pre-submit Claim Intelligence",
   description:
-    "Catch denials before the claim leaves your desk. Policy-cited recommendations, 0-100 denial risk score.",
+    "Catch denials before the claim leaves your system. Policy-cited recommendations, 0-100 denial risk score.",
 };
 
 export default function RootLayout({
