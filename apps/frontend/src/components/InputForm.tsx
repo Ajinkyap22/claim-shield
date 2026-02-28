@@ -127,7 +127,7 @@ Planned: Return in 1 year for next AWV. CPT 99396 (Preventive visit, 40–64). I
 const MOCK_TRANSCRIPT =
   "Patient is a 53-year-old female with longstanding right knee osteoarthritis. Conservative treatments over the past 8 weeks have failed. Recommending right total knee arthroplasty. Prior auth has been requested verbally.";
 
-const DOC_IMAGE_ACCEPT = ".pdf,.doc,.docx,image/*";
+const DOC_IMAGE_ACCEPT = ".pdf,.doc,.docx,.txt,image/*";
 
 /** Seed heights for waveform bars; repeated to fill width. */
 const WAVEFORM_SEED = [
