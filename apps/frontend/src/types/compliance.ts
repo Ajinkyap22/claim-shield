@@ -57,3 +57,32 @@ export interface ComplianceCheckResponse {
   /** Optional: analysis duration or policy name for display. */
   meta?: { analyzedInMs?: number; policyName?: string };
 }
+
+/**
+ * When the backend supports async pipeline, the initial POST may return a job ID
+ * instead of the full result. Frontend then polls the status endpoint until complete.
+ */
+export interface ClaimCheckJobStart {
+  jobId: string;
+}
+
+/**
+ * Response from the polling status endpoint (e.g. GET /api/v1/claim-check/status?jobId=...).
+ * Used to drive step-based loading UI when the backend supports it.
+ */
+export interface PollStatusResponse {
+  status: "pending" | "complete" | "failed";
+  /** Pipeline step id (e.g. extracting, normalizing, policy_check, clinician_agent, payer_agent, scoring). */
+  step?: string;
+  stepLabel?: string;
+  stepDescription?: string;
+  result?: ComplianceCheckResponse;
+  error?: string;
+}
+
+/** Step definition for loading UI when driven by polling. */
+export interface LoadingStep {
+  id: string;
+  label: string;
+  description?: string;
+}

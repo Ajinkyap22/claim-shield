@@ -1,4 +1,4 @@
-# Healthcare Claim Shield — Monorepo
+# Healthcare Claim Shield - Monorepo
 
 Turborepo + pnpm workspace. Frontend (Next.js) in `apps/frontend`; backend can be added under `apps/backend`.
 
