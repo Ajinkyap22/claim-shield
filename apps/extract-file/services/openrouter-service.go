@@ -7,9 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"mime/multipart"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -54,97 +54,7 @@ func TranscribeAudio(file io.Reader, fileName string) (string, error) {
 		return "", err
 	}
 
-	openRouterKey := os.Getenv("OPENROUTER_API_KEY")
-	if openRouterKey == "" {
-		return "", errors.New("OPENROUTER_API_KEY not set")
-	}
-
-	var requestBody bytes.Buffer
-	writer := multipart.NewWriter(&requestBody)
-
-	// Add audio file
-	part, err := writer.CreateFormFile("file", fileName)
-	if err != nil {
-		return "", err
-	}
-	if _, err := part.Write(audioBytes); err != nil {
-		return "", err
-	}
-
-	// Add model field
-	if err := writer.WriteField("model", "openai/whisper-1"); err != nil {
-		return "", err
-	}
-	if err := writer.WriteField("response_format", "json"); err != nil {
-		return "", err
-	}
-
-	if err := writer.Close(); err != nil {
-		return "", err
-	}
-
-	req, err := http.NewRequest(
-		"POST",
-		"https://openrouter.ai/api/v1/audio/transcriptions",
-		&requestBody,
-	)
-	if err != nil {
-		return "", err
-	}
-
-	req.Header.Set("Authorization", "Bearer "+openRouterKey)
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-
-	client := &http.Client{Timeout: 60 * time.Second}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("transcription request failed (%d): %s", resp.StatusCode, string(body))
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	if text := strings.TrimSpace(string(body)); text != "" && !json.Valid(body) {
-		return text, nil
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return "", err
-	}
-
-	if text := firstNonEmptyString(
-		getMapString(result, "text"),
-		getMapString(result, "transcript"),
-		getMapString(result, "output_text"),
-	); text != "" {
-		return text, nil
-	}
-
-	if data, ok := result["data"].(map[string]interface{}); ok {
-		if text := firstNonEmptyString(
-			getMapString(data, "text"),
-			getMapString(data, "transcript"),
-			getMapString(data, "output_text"),
-		); text != "" {
-			return text, nil
-		}
-	}
-
-	if text := extractTextFromChatShape(result); text != "" {
-		return text, nil
-	}
-
-	return "", errors.New("transcription response did not contain text")
+	return transcribeViaChatCompletions(audioBytes, fileName)
 }
 
 func callOpenRouterChat(payload map[string]interface{}) (string, error) {
@@ -260,4 +170,119 @@ func extractTextFromChatShape(result map[string]interface{}) string {
 	default:
 		return ""
 	}
+}
+
+func normalizeAudioFormat(ext string) string {
+	switch strings.ToLower(strings.TrimPrefix(ext, ".")) {
+	case "mp3", "wav", "m4a", "ogg", "flac", "aac", "aiff":
+		return strings.ToLower(strings.TrimPrefix(ext, "."))
+	case "mpeg", "mpga":
+		return "mp3"
+	default:
+		return "mp3"
+	}
+}
+
+func transcribeViaChatCompletions(audioBytes []byte, fileName string) (string, error) {
+
+	openRouterKey := os.Getenv("OPENROUTER_API_KEY")
+	if openRouterKey == "" {
+		return "", errors.New("OPENROUTER_API_KEY not set")
+	}
+
+	audioFormat := normalizeAudioFormat(filepath.Ext(fileName))
+	base64Audio := base64.StdEncoding.EncodeToString(audioBytes)
+
+	payload := map[string]interface{}{
+		"model": "openai/gpt-4o-audio-preview", // ✅ IMPORTANT
+		"messages": []map[string]interface{}{
+			{
+				"role": "user",
+				"content": []map[string]interface{}{
+					{
+						"type": "text",
+						"text": "Please transcribe this audio file. Provide the full transcription.",
+					},
+					{
+						"type": "input_audio",
+						"input_audio": map[string]string{
+							"data":   base64Audio,
+							"format": audioFormat,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequest(
+		"POST",
+		"https://openrouter.ai/api/v1/chat/completions",
+		bytes.NewBuffer(jsonData),
+	)
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+openRouterKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 120 * time.Second}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("openrouter error (%d): %s", resp.StatusCode, string(body))
+	}
+
+	return parseTranscriptionBody(body)
+}
+
+func parseTranscriptionBody(body []byte) (string, error) {
+	if text := strings.TrimSpace(string(body)); text != "" && !json.Valid(body) {
+		return text, nil
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", err
+	}
+
+	if text := firstNonEmptyString(
+		getMapString(result, "text"),
+		getMapString(result, "transcript"),
+		getMapString(result, "output_text"),
+	); text != "" {
+		return text, nil
+	}
+
+	if data, ok := result["data"].(map[string]interface{}); ok {
+		if text := firstNonEmptyString(
+			getMapString(data, "text"),
+			getMapString(data, "transcript"),
+			getMapString(data, "output_text"),
+		); text != "" {
+			return text, nil
+		}
+	}
+
+	if text := extractTextFromChatShape(result); text != "" {
+		return text, nil
+	}
+
+	return "", errors.New("transcription response did not contain text")
 }
