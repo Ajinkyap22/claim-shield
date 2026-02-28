@@ -51,6 +51,7 @@ Strips Protected Health Information before anything is sent to the NER model or 
 | NPI number | `[PROVIDER_ID]` |
 | Attending physician | `[PROVIDER_NAME]` |
 | Facility name | `[FACILITY]` |
+| Insurer / Payer | (stored in `PHIMap.insurer`, not replaced in text) |
 | Date of service | `[SERVICE_DATE]` |
 | Other dates | `[DATE_IMAGING]`, `[DATE_2]`, … |
 
@@ -64,7 +65,7 @@ Scans the scrubbed note for codes that were already written by the clinician.
 - **ICD-10**: matched by pattern `[A-Z]\d{2}(\.\d+)?` (e.g. `M54.50`)
 - **CPT**: only extracted when prefixed by the word `CPT` (e.g. `CPT: 99213`) to avoid false positives from zip codes or room numbers
 
-Extracted codes are seeded into ChromaDB immediately so they rank highly in later vector searches.
+Extracted codes are seeded into ChromaDB immediately so they rank highly in later vector searches. Each code's description is resolved via SQLite cache first, then the NLM API — so the embedding is stored as `"M54.50: Low back pain, unspecified"` rather than just the bare code string.
 
 ---
 
@@ -95,6 +96,8 @@ Implements the **NegEx algorithm** to drop entities that are:
 
 A 150-character pre-window and 80-character post-window is scanned around each entity span. Termination tokens (`but`, `however`, `although`, …) stop the negation from propagating past a clause boundary.
 
+Trigger matching uses **whole-word regex** (`\b` word boundaries) to prevent false negations — e.g. `"no"` will not match inside `"noted"`, `"known"`, or `"notation"`.
+
 ---
 
 ### Step 4 — Entity Merger (`entity_merger.py`)
@@ -103,6 +106,8 @@ Assembles fragmented NER spans into meaningful clinical phrases:
 - **Adjacent span merge** — spans of the same type within ≤25 characters are joined
 - **Sentence grouping** — entities are scoped to their containing sentence for context
 - **Cross-sentence anatomy attachment** — a `Biological_structure` entity within 150 chars of a preceding `Sign_symptom` is merged into it (e.g. "pain" + "lumbar spine" → "pain lumbar spine")
+- **Parenthesis completion** — if a merged span ends mid-parenthesis (e.g. `"NSAIDs (ibuprofen"`), the span is extended to include the closing `)` if it appears within 15 characters
+- **Deduplication** — after merging, entities with the same lowercased text and entity type are collapsed; the highest-confidence instance is kept
 
 Output is a list of `MergedEntity` objects carrying the merged text, type, confidence score, character offsets, and sentence context.
 
@@ -116,13 +121,21 @@ For each merged entity:
 2. If cache misses, call the **NLM Clinical Tables API** (free, no auth required)
 3. Cache any results returned by the API
 
-25 common CPT codes are seeded into the SQLite cache on first run (spine injections, PT codes, office visits, imaging, EMG/nerve studies).
+Seed codes are inserted into SQLite on startup (`INSERT OR IGNORE`):
+
+| Seed set | Count | Domain |
+|---|---|---|
+| `COMMON_ICD_CODES` | 31 | Spine, pain, neurology, Achilles/ankle, weakness |
+| `COMMON_CPT_CODES` | 25 | Spine injections, PT, office visits, imaging, EMG/nerve |
+
+On cache miss, the **NLM Clinical Tables API** is queried and results are cached in SQLite for future runs.
 
 **Vector Store (ChromaDB)**
 - Persistent client at `data/chroma_db/`
 - Two collections: `icd10_codes` and `cpt_codes`
 - Embeddings: `all-MiniLM-L6-v2` via `DefaultEmbeddingFunction` (~80 MB, auto-downloaded on first run)
-- Fetched codes are upserted into ChromaDB; then a semantic similarity query returns the **top-3 candidates** per entity
+- Seed codes are upserted into ChromaDB on **every startup** (so newly added seed codes are always indexed even if the collection already exists)
+- NLM-fetched codes are upserted per-entity; then a semantic similarity query returns the **top-3 candidates** per entity
 
 ---
 
@@ -134,6 +147,7 @@ The prompt explicitly instructs the model to:
 - Never invent or guess codes
 - Output a single JSON object (no markdown)
 - Use placeholder tokens so PHI can be reattached
+- Assign `diagnosisLinkId` based on clinical relevance — e.g. link an epidural injection to radiculopathy or disc displacement, not generic low back pain; do not default all procedures to index 1
 
 If `OPENROUTER_API_KEY` is not set, or the LLM call fails, the pipeline falls back to using the top vector candidate for each entity automatically.
 
@@ -149,9 +163,15 @@ Resources included in each bundle:
 | `Patient` | Name, date of birth |
 | `Practitioner` | Provider name + NPI identifier |
 | `Organization` | Facility name |
-| `Claim` | Status, type, priority, diagnosis refs, procedure line items |
-| `Condition` (×N) | One per ICD-10 diagnosis with clinical/verification status |
+| `Claim` | Status, type, priority (required R4 field), insurer, diagnosis refs, procedure line items |
+| `Condition` (×N) | One per ICD-10 diagnosis with `clinicalStatus` + `verificationStatus` (both required R4 fields) |
 | `Procedure` (×N) | One per CPT procedure with performed date |
+
+FHIR R4 compliance notes:
+- All dates (`Claim.created`, `Procedure.performedDateTime`, `Patient.birthDate`) are normalised to **ISO 8601 `YYYY-MM-DD`** format
+- `Claim.priority` is always set to `normal` (mandatory R4 field)
+- `Condition.verificationStatus` is always set to `confirmed` (mandatory R4 field)
+- `Claim.insurer` is populated from `PHIMap.insurer` (extracted in Step 1) when available, otherwise falls back to `"Unknown"`
 
 Code systems used:
 
