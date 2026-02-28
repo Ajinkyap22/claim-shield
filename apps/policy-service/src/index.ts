@@ -32,11 +32,47 @@ app.get("/health", (_req, res) => {
 
 app.post("/policies/ingest", upload.single("file"), async (req, res) => {
   try {
-    const metaRaw = req.body.metadata
-      ? JSON.parse(req.body.metadata as string)
-      : req.body;
+    // Parse metadata from multiple possible formats:
+    // 1. JSON string in "metadata" field (multipart form)
+    // 2. Individual form fields (payer_id, payer_name, policy_name)
+    // 3. JSON body fields directly
+    let metaRaw: unknown;
 
-    const metadata = IngestRequestMetadataSchema.parse(metaRaw);
+    if (typeof req.body.metadata === "string") {
+      try {
+        metaRaw = JSON.parse(req.body.metadata);
+      } catch {
+        res.status(400).json({
+          detail: "The 'metadata' field must be valid JSON",
+          expected_format: { payer_id: "string", payer_name: "string", policy_name: "string", source_url: "string (optional)" },
+        });
+        return;
+      }
+    } else if (req.body.payer_id || req.body.payer_name || req.body.policy_name) {
+      metaRaw = {
+        payer_id: req.body.payer_id,
+        payer_name: req.body.payer_name,
+        policy_name: req.body.policy_name,
+        source_url: req.body.source_url,
+      };
+    } else {
+      metaRaw = req.body;
+    }
+
+    const parseResult = IngestRequestMetadataSchema.safeParse(metaRaw);
+    if (!parseResult.success) {
+      const errors = parseResult.error.issues.map(i => `${i.path.join(".")}: ${i.message}`);
+      res.status(422).json({
+        detail: "Missing or invalid metadata fields",
+        required_fields: ["payer_id", "payer_name", "policy_name"],
+        optional_fields: ["source_url"],
+        validation_errors: errors,
+        hint: "Send metadata as a JSON string in the 'metadata' field, or as individual form fields (payer_id, payer_name, policy_name)",
+      });
+      return;
+    }
+
+    const metadata = parseResult.data;
     const policyId = uuidv4();
 
     let rawText: string;
@@ -79,10 +115,6 @@ app.post("/policies/ingest", upload.single("file"), async (req, res) => {
       criteria,
     });
   } catch (err: unknown) {
-    if (err instanceof z.ZodError) {
-      res.status(422).json({ detail: "Invalid metadata", issues: err.issues });
-      return;
-    }
     const message = err instanceof Error ? err.message : String(err);
     console.error("Ingest error:", message);
     res.status(500).json({ detail: message });

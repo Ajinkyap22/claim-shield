@@ -10,9 +10,12 @@ import type {
   ClaimBundle,
   ClinicalValidationResult,
   ClinicalContext,
+  PayerScoreBreakdown,
 } from "@compliance-shield/shared";
 import { config } from "./config.js";
 import { scoreAllPayers } from "./evaluator.js";
+import { toComplianceCheckResponse } from "./transformer.js";
+import type { ScoreRequest } from "./types.js";
 
 const app = express();
 app.use(cors());
@@ -28,8 +31,10 @@ app.get("/health", (_req, res) => {
 });
 
 app.post("/score", async (req, res) => {
+  const start = Date.now();
   try {
-    const { claim_bundle, validation_result, clinical_context, payers } = req.body;
+    const { claim_bundle, validation_result, clinical_context, payers } =
+      req.body as ScoreRequest;
 
     if (!claim_bundle || !validation_result || !clinical_context || !Array.isArray(payers)) {
       res.status(422).json({ detail: "Missing required fields: claim_bundle, validation_result, clinical_context, payers" });
@@ -40,9 +45,12 @@ app.post("/score", async (req, res) => {
     const validation = ClinicalValidationResultSchema.parse(validation_result) as ClinicalValidationResult;
     const context = ClinicalContextSchema.parse(clinical_context) as ClinicalContext;
 
-    const payer_scores = await scoreAllPayers(payers, context, bundle, validation);
+    const payerScores = await scoreAllPayers(payers, context, bundle, validation);
+    const elapsedMs = Date.now() - start;
 
-    res.json({ payer_scores });
+    const response = toComplianceCheckResponse(payerScores, validation, elapsedMs);
+
+    res.json(response);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("Scoring error:", message);

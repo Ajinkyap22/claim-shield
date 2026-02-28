@@ -4,7 +4,10 @@
   "type": "module",
   "scripts": {
     "test:scoring": "tsx test-scoring-flow.ts",
-    "test:scoring:skip-ingest": "tsx test-scoring-flow.ts --skip-ingest"
+    "test:scoring:skip-ingest": "tsx test-scoring-flow.ts --skip-ingest",
+    "test:generate-data": "tsx generate-test-data.ts",
+    "test:validation-scoring": "tsx test-validation-to-scoring.ts",
+    "test:validation-scoring:skip-ingest": "tsx test-validation-to-scoring.ts --skip-ingest"
   },
   "dependencies": {
     "@compliance-shield/shared": "file:../shared-ts"
