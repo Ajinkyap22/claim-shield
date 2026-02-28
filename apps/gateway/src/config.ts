@@ -7,4 +7,6 @@ export const config = {
     process.env.VALIDATION_SERVICE_URL || "http://localhost:8003",
   scoringServiceUrl:
     process.env.SCORING_SERVICE_URL || "http://localhost:8004",
+  policyServiceUrl:
+    process.env.POLICY_SERVICE_URL || "http://localhost:8005",
 };
