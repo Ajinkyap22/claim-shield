@@ -1,21 +1,21 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Outfit } from "next/font/google";
+import localFont from "next/font/local";
 import { QueryProvider } from "@/app/QueryProvider";
 import "./globals.css";
 
-const geistSans = Geist({
+const geistSans = localFont({
+  src: "../fonts/Geist-Variable.woff2",
   variable: "--font-geist-sans",
-  subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
+const geistMono = localFont({
+  src: "../fonts/GeistMono-Variable.woff2",
   variable: "--font-geist-mono",
-  subsets: ["latin"],
 });
 
-const outfit = Outfit({
+const outfit = localFont({
+  src: "../fonts/Outfit-Variable.woff2",
   variable: "--font-outfit",
-  subsets: ["latin"],
   display: "swap",
 });
 
