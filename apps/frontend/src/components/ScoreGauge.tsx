@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { motion } from "motion/react";
 
 interface ScoreGaugeProps {
   score: number;
@@ -120,10 +121,16 @@ export function ScoreGauge({ score, animated = true }: ScoreGaugeProps) {
   const tickAngles = [30, 60, 80].map(scoreToAngle);
 
   return (
-    <div className="flex flex-col items-center w-full py-2">
+    <motion.div
+      className="font-display flex flex-col items-center w-full py-2"
+      initial={{ opacity: 0, scale: 0.96 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
+      style={{ filter: "drop-shadow(0 0 20px rgba(13, 148, 136, 0.12))" }}
+    >
       <svg
         viewBox="0 0 220 165"
-        className="w-full max-w-[240px]"
+        className="w-full max-w-[260px]"
         style={{ overflow: "visible" }}
       >
         <defs>
@@ -132,8 +139,15 @@ export function ScoreGauge({ score, animated = true }: ScoreGaugeProps) {
               dx="0"
               dy="2"
               stdDeviation="3"
-              floodColor="rgba(0,0,0,0.15)"
+              floodColor="rgba(0,0,0,0.12)"
             />
+          </filter>
+          <filter id="gaugeGlow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
           </filter>
         </defs>
 
@@ -237,10 +251,11 @@ export function ScoreGauge({ score, animated = true }: ScoreGaugeProps) {
           y={CY + 48}
           textAnchor="middle"
           style={{
-            fontSize: "44px",
+            fontSize: "48px",
             fontWeight: 800,
             fill: config.color,
             letterSpacing: "-2px",
+            fontFamily: "var(--font-outfit), var(--font-geist-sans), sans-serif",
           }}
         >
           {displayScore}
@@ -251,7 +266,7 @@ export function ScoreGauge({ score, animated = true }: ScoreGaugeProps) {
           textAnchor="middle"
           style={{
             fontSize: "11px",
-            fill: "#94a3b8",
+            fill: "var(--body-text-muted)",
             fontWeight: 500,
             letterSpacing: "0.06em",
           }}
@@ -286,12 +301,12 @@ export function ScoreGauge({ score, animated = true }: ScoreGaugeProps) {
               className="w-2 h-2 rounded-full"
               style={{ backgroundColor: z.color }}
             />
-            <span style={{ fontSize: "0.68rem", color: "#64748b" }}>
+            <span style={{ fontSize: "0.68rem", color: "var(--body-text-muted)" }}>
               {z.label}
             </span>
           </div>
         ))}
       </div>
-    </div>
+    </motion.div>
   );
 }

@@ -133,7 +133,7 @@ function AudioWaveform({ isPlaying }: { isPlaying: boolean }) {
           style={{
             height: `${h}%`,
             maxHeight: "100%",
-            backgroundColor: isPlaying ? "#0d9488" : "#14b8a6",
+            backgroundColor: isPlaying ? "var(--teal-600)" : "var(--teal-500)",
             opacity: isPlaying ? 1 : 0.8,
           }}
         />
@@ -307,32 +307,55 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
   const canSubmit =
     (note.trim().length > 20 || audioFiles.length > 0) && !loading;
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Enter" || (!e.ctrlKey && !e.metaKey)) return;
+      e.preventDefault();
+      if (!((note.trim().length > 20 || audioFiles.length > 0) && !loading)) return;
+      onSubmit({
+        clinicalNote: note,
+        audioFiles: [...audioFiles],
+        policyFiles: [...policyFiles],
+        documentationFiles: [...docImageFiles],
+      });
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [note, audioFiles, policyFiles, docImageFiles, loading, onSubmit]);
+
   const formatTime = (s: number) =>
     `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
   return (
     <div className="space-y-4">
       {/* Clinical documentation */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50">
-          <div className="flex items-center gap-2">
-            <FileText className="w-4 h-4 text-slate-500" />
-            <span
-              className="text-slate-700"
-              style={{ fontSize: "0.875rem", fontWeight: 600 }}
-            >
-              Claim documentation
-            </span>
-            <span className="text-red-500" style={{ fontSize: "0.75rem" }}>
-              *
-            </span>
+      <div
+        className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden transition-[box-shadow] duration-300 hover:shadow-[var(--shadow-card-hover)]"
+        style={{ boxShadow: "var(--shadow-card)", borderLeft: "3px solid var(--teal-500)" }}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3.5 border-b border-slate-100 bg-slate-50/80">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-teal-50 border border-teal-100/80">
+              <FileText className="w-4 h-4 text-teal-600" />
+            </div>
+            <div>
+              <span
+                className="font-display text-slate-700"
+                style={{ fontSize: "0.9rem", fontWeight: 600 }}
+              >
+                Claim documentation
+              </span>
+              <span className="text-red-500 ml-0.5" style={{ fontSize: "0.75rem" }}>
+                *
+              </span>
+            </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setSampleDropdownOpen((o) => !o)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-teal-600 hover:bg-teal-50 hover:border-teal-200 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-teal-600 hover:bg-teal-50 hover:border-teal-200 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:ring-offset-2"
                 style={{ fontSize: "0.75rem", fontWeight: 500 }}
               >
                 Load sample
@@ -346,7 +369,8 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
                     onClick={() => setSampleDropdownOpen(false)}
                   />
                   <div
-                    className="absolute right-0 top-full mt-1 z-20 py-1 rounded-lg border border-slate-200 bg-white shadow-lg min-w-[200px]"
+                    className="absolute right-0 top-full mt-1 z-20 py-1 rounded-xl border border-slate-200/80 bg-white min-w-[200px]"
+                    style={{ boxShadow: "var(--shadow-card-hover)" }}
                     role="listbox"
                   >
                     {SAMPLE_DATASETS.map((ds) => (
@@ -368,7 +392,7 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
               type="button"
               onClick={() => docImageFileRef.current?.click()}
               disabled={loading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-slate-400/20 focus:ring-offset-2 disabled:opacity-50"
               style={{ fontSize: "0.75rem", fontWeight: 500 }}
             >
               <ImagePlus className="w-3.5 h-3.5" />
@@ -414,7 +438,7 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
           </div>
         )}
         <textarea
-          className="w-full px-5 py-4 text-slate-700 bg-white resize-none focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-shadow"
+          className="w-full px-5 py-4 text-slate-700 bg-white resize-none focus:outline-none focus:ring-2 focus:ring-teal-500/25 focus:ring-offset-0 transition-all duration-200 rounded-b-2xl"
           style={{ fontSize: "0.875rem", lineHeight: 1.7, minHeight: "220px" }}
           placeholder="Paste or type claim documentation (clinical narrative, progress notes, dictation). Include diagnoses, procedures, and prior treatment history."
           value={note}
@@ -440,26 +464,34 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
       {/* Audio + Policy row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Audio */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <AudioLines className="w-4 h-4 text-slate-500" />
-            <span
-              className="text-slate-700"
-              style={{ fontSize: "0.875rem", fontWeight: 600 }}
-            >
-              Audio documentation
-            </span>
-            <span className="text-slate-400" style={{ fontSize: "0.72rem" }}>
-              (optional)
-            </span>
+        <div
+          className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden transition-[box-shadow] duration-300 hover:shadow-[var(--shadow-card-hover)]"
+          style={{ boxShadow: "var(--shadow-card)" }}
+        >
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 bg-teal-50/70">
+            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-white border border-teal-100">
+              <AudioLines className="w-4 h-4 text-teal-600" />
+            </div>
+            <div>
+              <span
+                className="font-display text-slate-700"
+                style={{ fontSize: "0.9rem", fontWeight: 600 }}
+              >
+                Audio documentation
+              </span>
+              <span className="text-slate-400 ml-1" style={{ fontSize: "0.72rem" }}>
+                (optional)
+              </span>
+            </div>
           </div>
+          <div className="p-4">
 
           {audioStatus === "idle" && (
             <div className="flex gap-2">
               <button
                 onClick={startRecording}
                 disabled={loading}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-red-50 hover:border-red-200 text-slate-600 hover:text-red-600 transition-all disabled:opacity-50"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-red-50 hover:border-red-200 text-slate-600 hover:text-red-600 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-400/20 focus:ring-offset-2 disabled:opacity-50"
                 style={{ fontSize: "0.8rem" }}
               >
                 <Mic className="w-3.5 h-3.5" />
@@ -468,7 +500,7 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
               <button
                 onClick={() => audioFileRef.current?.click()}
                 disabled={loading}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 transition-all disabled:opacity-50"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-slate-400/20 focus:ring-offset-2 disabled:opacity-50"
                 style={{ fontSize: "0.8rem" }}
               >
                 <Upload className="w-3.5 h-3.5" />
@@ -554,28 +586,37 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
                 </div>
               </div>
             )}
+          </div>
           <audio ref={audioRef} className="hidden" />
         </div>
 
         {/* Policy PDF */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Paperclip className="w-4 h-4 text-slate-500" />
-            <span
-              className="text-slate-700"
-              style={{ fontSize: "0.875rem", fontWeight: 600 }}
-            >
-              Payer Policy
-            </span>
-            <span className="text-slate-400" style={{ fontSize: "0.72rem" }}>
-              (PDF)
-            </span>
+        <div
+          className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden transition-[box-shadow] duration-300 hover:shadow-[var(--shadow-card-hover)]"
+          style={{ boxShadow: "var(--shadow-card)" }}
+        >
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 bg-teal-50/70">
+            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-white border border-teal-100">
+              <Paperclip className="w-4 h-4 text-teal-600" />
+            </div>
+            <div>
+              <span
+                className="font-display text-slate-700"
+                style={{ fontSize: "0.9rem", fontWeight: 600 }}
+              >
+                Payer Policy
+              </span>
+              <span className="text-slate-400 ml-1" style={{ fontSize: "0.72rem" }}>
+                (PDF)
+              </span>
+            </div>
           </div>
+          <div className="p-4">
 
           <button
             onClick={() => policyFileRef.current?.click()}
             disabled={loading}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg border-2 border-dashed border-slate-200 hover:border-teal-300 text-slate-500 hover:text-teal-600 transition-all w-full justify-center disabled:opacity-50"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg border-2 border-dashed border-slate-200 hover:border-teal-300 text-slate-500 hover:text-teal-600 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 w-full justify-center focus:outline-none focus:ring-2 focus:ring-teal-500/25 focus:ring-offset-2 disabled:opacity-50"
             style={{ fontSize: "0.8rem" }}
           >
             <Upload className="w-3.5 h-3.5" />
@@ -626,6 +667,7 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
             className="hidden"
             onChange={handlePolicyUpload}
           />
+          </div>
         </div>
       </div>
 
@@ -641,11 +683,12 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
             })
           }
           disabled={!canSubmit}
-          className="flex items-center gap-3 px-8 py-3.5 rounded-xl text-white transition-all shadow-md"
+          className="flex items-center gap-3 px-8 py-3.5 rounded-xl text-white transition-all duration-300 hover:scale-[1.02] hover:shadow-[var(--shadow-glow-teal)] active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:ring-offset-2 disabled:hover:scale-100 disabled:active:scale-100 disabled:hover:shadow-none"
           style={{
             background: canSubmit
-              ? "linear-gradient(135deg, #0f2744 0%, #1a4070 100%)"
+              ? "linear-gradient(135deg, var(--navy-900) 0%, var(--navy-700) 100%)"
               : "#94a3b8",
+            boxShadow: canSubmit ? "0 4px 14px rgba(15, 39, 68, 0.25)" : "none",
             cursor: canSubmit ? "pointer" : "not-allowed",
             fontSize: "1rem",
             fontWeight: 600,

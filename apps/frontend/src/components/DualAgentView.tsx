@@ -83,10 +83,16 @@ export function DualAgentView({ clinicianView, payerView }: DualAgentViewProps) 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {/* Clinician View */}
-      <div className="rounded-xl border border-blue-200 overflow-hidden shadow-sm">
+      <div
+        className="rounded-2xl border border-blue-200/80 overflow-hidden transition-all duration-300 hover:shadow-[var(--shadow-card-hover)]"
+        style={{ boxShadow: "var(--shadow-card)" }}
+      >
         <div
           className="px-5 py-3.5 flex items-center gap-3"
-          style={{ background: "linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)" }}
+          style={{
+            background: "linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)",
+            boxShadow: "0 2px 8px rgba(29, 78, 216, 0.2)",
+          }}
         >
           <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/15">
             <Stethoscope className="w-4 h-4 text-white" />
@@ -141,10 +147,16 @@ export function DualAgentView({ clinicianView, payerView }: DualAgentViewProps) 
       </div>
 
       {/* Payer View */}
-      <div className="rounded-xl border border-amber-200 overflow-hidden shadow-sm">
+      <div
+        className="rounded-2xl border border-amber-200/80 overflow-hidden transition-all duration-300 hover:shadow-[var(--shadow-card-hover)]"
+        style={{ boxShadow: "var(--shadow-card)" }}
+      >
         <div
           className="px-5 py-3.5 flex items-center gap-3"
-          style={{ background: "linear-gradient(135deg, #92400e 0%, #b45309 100%)" }}
+          style={{
+            background: "linear-gradient(135deg, #92400e 0%, #b45309 100%)",
+            boxShadow: "0 2px 8px rgba(146, 64, 14, 0.2)",
+          }}
         >
           <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/15">
             <FileSearch className="w-4 h-4 text-white" />

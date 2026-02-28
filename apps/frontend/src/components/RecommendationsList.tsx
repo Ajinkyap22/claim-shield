@@ -1,5 +1,7 @@
-import { Lightbulb, BookOpen, Wrench } from "lucide-react";
+import { useState } from "react";
+import { Lightbulb, BookOpen, Wrench, Copy } from "lucide-react";
 import { formatCitation } from "@/lib/formatCitation";
+import { MOCK_COMPLIANCE_RESPONSE } from "@/api/compliance";
 
 type RecommendationItem = {
   id?: string | number;
@@ -11,69 +13,6 @@ type RecommendationItem = {
   action?: string;
   priorityColor?: { bg: string; text: string; border: string };
 };
-
-const MOCK_RECOMMENDATIONS: RecommendationItem[] = [
-  {
-    id: 1,
-    priority: "Critical",
-    title: "Obtain prior authorization for CPT 27447",
-    detail:
-      "Contact BlueCross BlueShield prior auth line. Reference the claim documentation dated 02/20/2026. Attach PA approval number to claim form box 23 before submission.",
-    citation: "Policy § 4.2.1",
-    citationFull:
-      "Coverage & Authorization Criteria, Section 4.2.1: Elective Surgical Procedures",
-    action: "Obtain auth number",
-    priorityColor: { bg: "#fee2e2", text: "#dc2626", border: "#fecaca" },
-  },
-  {
-    id: 2,
-    priority: "Critical",
-    title: "Append modifier -RT to CPT 27447 and CPT 29877",
-    detail:
-      "Both procedure codes require the laterality modifier -RT (right side). Update claim form line items before submission. Verify with the billing system's modifier validation.",
-    citation: "Policy § 3.1",
-    citationFull:
-      "Coding Requirements, Section 3.1: Laterality and Side Designators",
-    action: "Update modifiers",
-    priorityColor: { bg: "#fee2e2", text: "#dc2626", border: "#fecaca" },
-  },
-  {
-    id: 3,
-    priority: "Required",
-    title: "Extend conservative treatment documentation to ≥12 weeks",
-    detail:
-      "Documentation shows 8 weeks of PT; policy requires 12 consecutive weeks. Supplement record with prior PT notes or schedule additional 4 weeks before proceeding.",
-    citation: "Policy § 7.2",
-    citationFull:
-      "Medical Necessity Criteria, Section 7.2: Conservative Treatment Threshold",
-    action: "Add to record",
-    priorityColor: { bg: "#ffedd5", text: "#ea580c", border: "#fed7aa" },
-  },
-  {
-    id: 4,
-    priority: "Required",
-    title: "Attach signed medical necessity letter",
-    detail:
-      "A letter from Dr. Sarah Chen, MD, must accompany the claim. Include diagnosis, failed conservative treatments, surgical plan, and expected functional outcome.",
-    citation: "Policy § 5.1",
-    citationFull:
-      "Claims Submission Guidelines, Section 5.1: Supporting Documentation",
-    action: "Draft letter",
-    priorityColor: { bg: "#ffedd5", text: "#ea580c", border: "#fed7aa" },
-  },
-  {
-    id: 5,
-    priority: "Advisory",
-    title: "Resolve ICD-10 conflict: M17.11 vs Z96.651",
-    detail:
-      "M17.11 (primary OA, right knee) co-billed with Z96.651 (presence of right artificial knee joint) may trigger an edit. Confirm surgical history and clarify in the notes if the patient has a prior partial replacement.",
-    citation: "Policy § 8.3.2",
-    citationFull:
-      "Coding Integrity, Section 8.3.2: Diagnosis Code Conflict Review",
-    action: "Confirm history",
-    priorityColor: { bg: "#f0fdf4", text: "#16a34a", border: "#bbf7d0" },
-  },
-];
 
 const priorityOrder: Record<string, number> = {
   Critical: 0,
@@ -103,8 +42,27 @@ export function RecommendationsList({
   onFixAll,
   fixAllInProgress = false,
 }: RecommendationsListProps) {
+  const [lastCopiedId, setLastCopiedId] = useState<string | number | null>(null);
+
+  const copyRecText = (rec: RecommendationItem): string => {
+    const line1 = `${rec.title} — ${formatCitation(rec.citation)}`;
+    return rec.detail ? `${line1}\n${rec.detail}` : line1;
+  };
+
+  const handleCopyRec = async (rec: RecommendationItem, rowId: string | number) => {
+    try {
+      await navigator.clipboard.writeText(copyRecText(rec));
+      setLastCopiedId(rowId);
+      setTimeout(() => setLastCopiedId(null), 2000);
+    } catch {
+      setLastCopiedId(null);
+    }
+  };
+
   const list = (
-    propRecommendations?.length ? propRecommendations : MOCK_RECOMMENDATIONS
+    propRecommendations?.length
+      ? propRecommendations
+      : (MOCK_COMPLIANCE_RESPONSE.recommendations ?? []) as RecommendationItem[]
   ).map((r) => ({
     ...r,
     priorityColor: r.priorityColor ?? defaultPriorityColor(r.priority),
@@ -117,13 +75,16 @@ export function RecommendationsList({
   );
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50 flex items-center justify-between flex-wrap gap-3">
+    <div
+      className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden transition-[box-shadow] duration-300 hover:shadow-[var(--shadow-card-hover)]"
+      style={{ boxShadow: "var(--shadow-card)" }}
+    >
+      <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2">
           <Lightbulb className="w-4 h-4 text-amber-500" />
           <span
-            className="text-slate-700"
-            style={{ fontSize: "0.875rem", fontWeight: 600 }}
+            className="font-display text-[var(--body-text)]"
+            style={{ fontSize: "0.9rem", fontWeight: 600 }}
           >
             Policy-Cited Recommendations
           </span>
@@ -141,7 +102,7 @@ export function RecommendationsList({
         </div>
         <div className="flex items-center gap-1.5">
           <BookOpen className="w-3.5 h-3.5 text-slate-400" />
-          <span className="text-slate-400" style={{ fontSize: "0.7rem" }}>
+          <span className="text-[var(--body-text-muted)]" style={{ fontSize: "0.7rem" }}>
             BlueCross BlueShield Policy v2026.1
           </span>
         </div>
@@ -151,7 +112,7 @@ export function RecommendationsList({
         {sorted.map((rec, idx) => (
           <div
             key={rec.id ?? idx}
-            className="p-5 hover:bg-slate-50/60 transition-colors group"
+            className="p-5 hover:bg-slate-50/60 transition-colors duration-200 group"
           >
             <div className="flex items-start gap-4">
               {/* Number */}
@@ -229,6 +190,23 @@ export function RecommendationsList({
                       {formatCitation(rec.citation)}
                     </span>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyRec(rec, rec.id ?? idx)}
+                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 hover:border-slate-300 transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500/25 focus:ring-offset-2 shrink-0"
+                    title="Copy recommendation and citation"
+                    aria-label={
+                      lastCopiedId === (rec.id ?? idx)
+                        ? "Copied"
+                        : "Copy recommendation and citation"
+                    }
+                    style={{ fontSize: "0.72rem" }}
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    {lastCopiedId === (rec.id ?? idx) ? (
+                      <span className="text-teal-600 font-medium">Copied</span>
+                    ) : null}
+                  </button>
                 </div>
 
                 {rec.detail && (
@@ -261,11 +239,12 @@ export function RecommendationsList({
             type="button"
             onClick={() => onFixAll?.(sorted)}
             disabled={fixAllInProgress}
-            className="flex items-center ml-auto justify-center gap-2.5 px-5 py-3.5 rounded-xl text-white transition-all hover:opacity-95 disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
+            className="flex items-center ml-auto justify-center gap-2.5 px-5 py-3.5 rounded-xl text-white transition-all hover:opacity-95 hover:scale-[1.02] active:scale-[0.98] duration-200 focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
             style={{
               fontSize: "0.9375rem",
               fontWeight: 700,
-              background: "linear-gradient(135deg, #0f2744 0%, #1a4070 100%)",
+              background: "linear-gradient(135deg, var(--navy-900) 0%, var(--navy-700) 100%)",
+              boxShadow: "0 2px 12px rgba(15, 39, 68, 0.2)",
             }}
           >
             <Wrench className="w-5 h-5 shrink-0" />

@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { motion } from "motion/react";
 import {
   CheckCircle2,
+  Copy,
   Download,
   RotateCcw,
   Clock,
@@ -13,13 +14,10 @@ import { DualAgentView } from "@/components/DualAgentView";
 import { RecommendationsList } from "@/components/RecommendationsList";
 import { ValidationIssues } from "@/components/ValidationIssues";
 import type { ComplianceCheckResponse } from "@/types/compliance";
+import { MOCK_COMPLIANCE_RESPONSE } from "@/api/compliance";
 import { formatCitation } from "@/lib/formatCitation";
 import html2canvas from "html2canvas-pro";
 import { jsPDF } from "jspdf";
-
-const MOCK_SCORE = 74;
-const MOCK_SCORE_EXPLANATION =
-  "Prior auth undocumented and laterality modifiers missing (Policy § 4.2.1, § 3.1)";
 
 interface ResultsPanelProps {
   /** When provided (from API), overrides mock data. When null, UI uses internal mocks. */
@@ -39,15 +37,48 @@ function fadeUp(delay: number = 0) {
   };
 }
 
+const TOP_RECOMMENDATIONS_COPY = 5;
+
 export function ResultsPanel({ result = null, onReset }: ResultsPanelProps) {
   const topRef = useRef<HTMLDivElement>(null);
   const [pdfExporting, setPdfExporting] = useState(false);
-  const score = result?.score ?? MOCK_SCORE;
-  const scoreExplanation = result?.scoreExplanation ?? MOCK_SCORE_EXPLANATION;
+  const [copySummaryFeedback, setCopySummaryFeedback] = useState<"idle" | "copied" | "error">("idle");
+  const score = result?.score ?? MOCK_COMPLIANCE_RESPONSE.score;
+  const scoreExplanation =
+    result?.scoreExplanation ?? MOCK_COMPLIANCE_RESPONSE.scoreExplanation;
+  const recommendations = result?.recommendations ?? MOCK_COMPLIANCE_RESPONSE.recommendations ?? [];
 
-  useEffect(() => {
-    topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, []);
+  const buildSummaryText = (): string => {
+    const lines: string[] = [
+      `Denial Risk Score: ${score}`,
+      "",
+      `Key finding: ${formatCitation(scoreExplanation)}`,
+      "",
+      "Recommendations:",
+    ];
+    const topRecs = recommendations.slice(0, TOP_RECOMMENDATIONS_COPY);
+    topRecs.forEach((r) => {
+      lines.push(`• ${r.title} — ${formatCitation(r.citation)}`);
+    });
+    return lines.join("\n");
+  };
+
+  const copySummaryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleCopySummary = async () => {
+    if (copySummaryTimeoutRef.current) {
+      clearTimeout(copySummaryTimeoutRef.current);
+      copySummaryTimeoutRef.current = null;
+    }
+    try {
+      await navigator.clipboard.writeText(buildSummaryText());
+      setCopySummaryFeedback("copied");
+      copySummaryTimeoutRef.current = setTimeout(() => setCopySummaryFeedback("idle"), 2000);
+    } catch {
+      setCopySummaryFeedback("error");
+      copySummaryTimeoutRef.current = setTimeout(() => setCopySummaryFeedback("idle"), 2000);
+    }
+  };
 
   const handleExportPdf = async () => {
     const el = topRef.current;
@@ -99,17 +130,18 @@ export function ResultsPanel({ result = null, onReset }: ResultsPanelProps) {
       {/* Results header bar */}
       <motion.div
         {...fadeUp(0)}
-        className="flex items-center justify-between rounded-xl px-5 py-3 bg-white border border-slate-200 shadow-sm"
+        className="flex items-center justify-between rounded-2xl px-5 py-3 bg-white border border-slate-200/80"
+        style={{ boxShadow: "var(--shadow-card)" }}
       >
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded-full bg-teal-50">
+          <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-teal-50">
             <CheckCircle2 className="w-4 h-4 text-teal-600" />
           </div>
           <div>
-            <p className="text-slate-800" style={{ fontSize: "0.875rem", fontWeight: 600 }}>
+            <p className="font-display text-[var(--body-text)]" style={{ fontSize: "0.9rem", fontWeight: 600 }}>
               Pre-submit check complete
             </p>
-            <p className="text-slate-400 flex items-center gap-1" style={{ fontSize: "0.72rem" }}>
+            <p className="text-[var(--body-text-muted)] flex items-center gap-1" style={{ fontSize: "0.72rem" }}>
               <Clock className="w-3 h-3" />
               Analyzed in 2.4 s · BlueCross BlueShield Policy v2026.1
             </p>
@@ -118,9 +150,23 @@ export function ResultsPanel({ result = null, onReset }: ResultsPanelProps) {
         <div className="flex items-center gap-2 no-print">
           <button
             type="button"
+            onClick={handleCopySummary}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-slate-400/20 focus:ring-offset-2"
+            style={{ fontSize: "0.78rem" }}
+            title="Copy score and recommendations to clipboard"
+          >
+            <Copy className="w-3.5 h-3.5" />
+            {copySummaryFeedback === "copied"
+              ? "Copied"
+              : copySummaryFeedback === "error"
+                ? "Copy failed"
+                : "Copy summary"}
+          </button>
+          <button
+            type="button"
             onClick={handleExportPdf}
             disabled={pdfExporting}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-slate-400/20 focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
             style={{ fontSize: "0.78rem" }}
           >
             <Download className="w-3.5 h-3.5" />
@@ -129,7 +175,7 @@ export function ResultsPanel({ result = null, onReset }: ResultsPanelProps) {
           <button
             type="button"
             onClick={onReset}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-teal-500/25 focus:ring-offset-2"
             style={{ fontSize: "0.78rem" }}
           >
             <RotateCcw className="w-3.5 h-3.5" />
@@ -141,10 +187,13 @@ export function ResultsPanel({ result = null, onReset }: ResultsPanelProps) {
       {/* ── HERO: Score + Claim Summary ── */}
       <motion.div {...fadeUp(0.08)} className="grid grid-cols-1 lg:grid-cols-5 gap-4">
         {/* Score Card */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
+        <div
+          className="lg:col-span-2 bg-white rounded-2xl border border-slate-200/80 overflow-hidden transition-[box-shadow] duration-300 hover:shadow-[var(--shadow-card-hover)]"
+          style={{ boxShadow: "var(--shadow-card)" }}
+        >
+          <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/80 flex items-center gap-2">
             <ShieldAlert className="w-4 h-4 text-orange-500" />
-            <span className="text-slate-700" style={{ fontSize: "0.875rem", fontWeight: 600 }}>
+            <span className="font-display text-[var(--body-text)]" style={{ fontSize: "0.9rem", fontWeight: 600 }}>
               Denial Risk Score
             </span>
           </div>
@@ -191,13 +240,13 @@ export function ResultsPanel({ result = null, onReset }: ResultsPanelProps) {
       {/* ── DUAL AGENT VIEW ── */}
       <motion.div {...fadeUp(0.16)}>
         <div className="flex items-center gap-3 mb-3">
-          <div className="flex-1 h-px bg-slate-200" />
-          <span className="text-slate-400 flex items-center gap-1.5" style={{ fontSize: "0.72rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-            <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+          <div className="flex-1 h-px bg-slate-200/80" />
+          <span className="text-[var(--body-text-muted)] flex items-center gap-1.5 font-display" style={{ fontSize: "0.72rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            <span className="w-2 h-2 rounded-full bg-blue-400" />
             Two-Agent Analysis
-            <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+            <span className="w-2 h-2 rounded-full bg-amber-400" />
           </span>
-          <div className="flex-1 h-px bg-slate-200" />
+          <div className="flex-1 h-px bg-slate-200/80" />
         </div>
         <DualAgentView clinicianView={result?.clinicianView} payerView={result?.payerView} />
       </motion.div>
@@ -215,9 +264,9 @@ export function ResultsPanel({ result = null, onReset }: ResultsPanelProps) {
       {/* Footer note */}
       <motion.div {...fadeUp(0.34)}>
         <div className="text-center py-4">
-          <p className="text-slate-400" style={{ fontSize: "0.72rem" }}>
+          <p className="text-[var(--body-text-muted)]" style={{ fontSize: "0.72rem" }}>
             ComplianceShield can be embedded in your billing workflow or accessed via{" "}
-            <span className="font-mono" style={{ color: "#0d9488" }}>POST /api/v1/claim-check</span>.{" "}
+            <span className="font-mono" style={{ color: "var(--teal-600)" }}>POST /api/v1/claim-check</span>.{" "}
             Results are advisory; always confirm with your billing compliance officer.
           </p>
         </div>

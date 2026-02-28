@@ -1,4 +1,5 @@
 import { AlertTriangle, Info } from "lucide-react";
+import { MOCK_COMPLIANCE_RESPONSE } from "@/api/compliance";
 
 type ValidationIssueItem = {
   type: "error" | "warn" | "info";
@@ -7,55 +8,27 @@ type ValidationIssueItem = {
   detail?: string;
 };
 
-const MOCK_ISSUES: ValidationIssueItem[] = [
-  {
-    type: "error",
-    code: "CPT 27447",
-    title: "Missing laterality modifier",
-    detail: "Modifier -RT or -LT required. Claim will auto-reject at clearinghouse.",
-  },
-  {
-    type: "error",
-    code: "CPT 29877",
-    title: "Missing laterality modifier",
-    detail: "Modifier -RT or -LT required. May trigger duplicate service edit.",
-  },
-  {
-    type: "warn",
-    code: "ICD-10 Pair",
-    title: "Potential code conflict: M17.11 + Z96.651",
-    detail: "OA of native right knee co-submitted with history of right knee replacement. May indicate coding or documentation inconsistency.",
-  },
-  {
-    type: "warn",
-    code: "POS Code",
-    title: "Place of Service not specified",
-    detail: "Facility type (inpatient/outpatient/ASC) affects rate schedule. Verify POS code 21, 22, or 24.",
-  },
-  {
-    type: "info",
-    code: "NPI",
-    title: "Facility NPI not included",
-    detail: "Facility NPI (Group NPI) should be added to box 32a. Individual provider NPI present.",
-  },
-];
-
 interface ValidationIssuesProps {
   /** When provided from API, overrides mock list. */
   validationIssues?: ValidationIssueItem[] | null;
 }
 
 export function ValidationIssues({ validationIssues }: ValidationIssuesProps) {
-  const issues = (validationIssues?.length ? validationIssues : MOCK_ISSUES) as ValidationIssueItem[];
+  const issues = (validationIssues?.length
+    ? validationIssues
+    : (MOCK_COMPLIANCE_RESPONSE.validationIssues ?? [])) as ValidationIssueItem[];
   const errors = issues.filter((i) => i.type === "error");
   const warnings = issues.filter((i) => i.type === "warn");
   const infos = issues.filter((i) => i.type === "info");
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
+    <div
+      className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden transition-[box-shadow] duration-300 hover:shadow-[var(--shadow-card-hover)]"
+      style={{ boxShadow: "var(--shadow-card)" }}
+    >
+      <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/80 flex items-center gap-2">
         <AlertTriangle className="w-4 h-4 text-red-500" />
-        <span className="text-slate-700" style={{ fontSize: "0.875rem", fontWeight: 600 }}>
+        <span className="font-display text-[var(--body-text)]" style={{ fontSize: "0.9rem", fontWeight: 600 }}>
           Validation &amp; Coding Issues
         </span>
         <div className="flex items-center gap-1.5 ml-auto">
