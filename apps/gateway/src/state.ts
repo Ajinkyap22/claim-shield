@@ -19,6 +19,12 @@ const STAGE_ORDER = [
 const pipelineStatuses = new Map<string, PipelineStatus>();
 const pipelineResults = new Map<string, PipelineResult>();
 
+/** When a pipeline reached completed/failed (for TTL cleanup). */
+const pipelineFinishedAt = new Map<string, number>();
+
+/** TTL in ms after which completed/failed pipeline data is removed (HIPAA: minimize ePHI retention). */
+const RESULT_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
 export function createPipeline(): string {
   const id = uuidv4().replace(/-/g, "").slice(0, 12);
 
@@ -89,6 +95,7 @@ export function failPipeline(pipelineId: string, error: string): void {
 
   status.current_stage = PipelineStage.FAILED;
   status.error = error;
+  recordFailedAt(pipelineId);
 }
 
 export function finishPipeline(
@@ -101,12 +108,43 @@ export function finishPipeline(
   status.current_stage = PipelineStage.COMPLETED;
   status.progress_pct = 100;
   pipelineResults.set(pipelineId, result);
+  pipelineFinishedAt.set(pipelineId, Date.now());
+}
+
+function recordFailedAt(pipelineId: string): void {
+  pipelineFinishedAt.set(pipelineId, Date.now());
+}
+
+function isExpired(pipelineId: string): boolean {
+  const at = pipelineFinishedAt.get(pipelineId);
+  if (at == null) return false;
+  return Date.now() - at > RESULT_TTL_MS;
+}
+
+function expireIfNeeded(pipelineId: string): void {
+  if (isExpired(pipelineId)) {
+    deletePipeline(pipelineId);
+    pipelineFinishedAt.delete(pipelineId);
+  }
 }
 
 export function getStatus(pipelineId: string): PipelineStatus | undefined {
+  expireIfNeeded(pipelineId);
   return pipelineStatuses.get(pipelineId);
 }
 
 export function getResult(pipelineId: string): PipelineResult | undefined {
+  expireIfNeeded(pipelineId);
   return pipelineResults.get(pipelineId);
+}
+
+/** Remove pipeline result (ePHI) from memory. Call after client has fetched the result (HIPAA: minimize retention). */
+export function deleteResult(pipelineId: string): void {
+  pipelineResults.delete(pipelineId);
+}
+
+/** Remove pipeline status and result. Call after client has fetched result to avoid retaining ePHI. */
+export function deletePipeline(pipelineId: string): void {
+  pipelineResults.delete(pipelineId);
+  pipelineStatuses.delete(pipelineId);
 }

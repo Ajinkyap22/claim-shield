@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Lightbulb, BookOpen, Wrench, Copy } from "lucide-react";
+import { Lightbulb, BookOpen, Copy } from "lucide-react";
 import { formatCitation } from "@/lib/formatCitation";
 import { MOCK_COMPLIANCE_RESPONSE } from "@/api/compliance";
 
@@ -31,16 +31,10 @@ const defaultPriorityColor = (priority?: string) => {
 interface RecommendationsListProps {
   /** When provided from API, overrides mock list. */
   recommendations?: RecommendationItem[] | null;
-  /** Called when user clicks "Fix all issues"; receives the full list for a single backend request. */
-  onFixAll?: (recommendations: RecommendationItem[]) => void;
-  /** When true, disable the Fix all button and show loading state. */
-  fixAllInProgress?: boolean;
 }
 
 export function RecommendationsList({
   recommendations: propRecommendations,
-  onFixAll,
-  fixAllInProgress = false,
 }: RecommendationsListProps) {
   const [lastCopiedId, setLastCopiedId] = useState<string | number | null>(
     null,
@@ -239,28 +233,6 @@ export function RecommendationsList({
           </div>
         ))}
       </div>
-
-      {/* Fix all issues: prominent CTA at bottom */}
-      {list.length > 0 && (
-        <div className="px-5 py-4 border-t border-slate-200 bg-slate-50">
-          <button
-            type="button"
-            onClick={() => onFixAll?.(sorted)}
-            disabled={fixAllInProgress}
-            className="flex items-center ml-auto justify-center gap-2.5 px-5 py-3.5 rounded-xl text-white transition-all hover:opacity-95 hover:scale-[1.02] active:scale-[0.98] duration-200 focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
-            style={{
-              fontSize: "0.9375rem",
-              fontWeight: 700,
-              background:
-                "linear-gradient(135deg, var(--navy-900) 0%, var(--navy-700) 100%)",
-              boxShadow: "0 2px 12px rgba(15, 39, 68, 0.2)",
-            }}
-          >
-            <Wrench className="w-5 h-5 shrink-0" />
-            {fixAllInProgress ? "Applying fixes…" : "Fix all issues"}
-          </button>
-        </div>
-      )}
     </div>
   );
 }

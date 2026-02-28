@@ -141,8 +141,7 @@ export async function scoreForPayer(
   });
 
   const parsed = JSON.parse(rawResponse);
-  console.log("[DEBUG] LLM response keys:", Object.keys(parsed));
-  console.log("[DEBUG] Raw LLM response:", rawResponse.slice(0, 500));
+  // Do not log LLM response content: may contain claim/clinical details (PHI)
 
   // Normalize: LLM sometimes uses alternative field names
   if (!parsed.rules_evaluated) {

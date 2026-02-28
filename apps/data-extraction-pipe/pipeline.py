@@ -14,7 +14,6 @@ Step 8: Validate JSON → reattach PHI → build FHIR R4 Bundle
 
 Call run_pipeline(text) to execute the full pipeline and get back a FHIR bundle dict.
 """
-import json
 from transformers import pipeline as hf_pipeline, AutoTokenizer, AutoModelForTokenClassification
 
 from llm_client import query_openrouter, build_prompt_with_candidates
@@ -75,7 +74,7 @@ def run_pipeline(raw_text: str) -> dict:
     # ── Step 1: PHI scrub ────────────────────────────────────────────────────
     print("\n[1] Scrubbing PHI...")
     scrubbed_text, phi_map = scrub_phi(raw_text)
-    print("    PHI map:", phi_map.to_dict())
+    # Do not log phi_map: it contains PHI (patient name, DOB, NPI, etc.)
 
     # ── Step 1b: Extract explicit codes already in the note ──────────────────
     print("\n[1b] Extracting explicit codes from text...")
@@ -119,15 +118,14 @@ def run_pipeline(raw_text: str) -> dict:
     merged = list(seen.values())
 
     print(f"    Merged entities: {len(merged)}")
-    for e in merged:
-        print(f"      [{e.entity_group}] '{e.text}' (score={e.score:.2f})")
+    # Do not log entity text: it may contain clinical terms that could be identifying in context
 
     # ── Steps 5-6: Code fetch + vector DB ────────────────────────────────────
     print("\n[5-6] Fetching real codes and querying vector store...")
     coded_entities = assign_codes_to_entities(merged, chroma_client)
     candidates_text = format_candidates_for_prompt(coded_entities)
-    print("    Candidates:\n")
-    print(candidates_text)
+    # Do not log candidates_text: may contain clinical/claim content
+    print("    Candidates: prepared for LLM")
 
     # ── Step 7: LLM with grounded candidates ──────────────────────────────────
     print("\n[7] Querying LLM (codes grounded by vector search)...")
@@ -136,7 +134,11 @@ def run_pipeline(raw_text: str) -> dict:
         scrubbed_text,
         prompt_instruction=build_prompt_with_candidates(candidates_text),
     )
-    print("    LLM response:", (openrouter_response[:200] + "...") if openrouter_response and len(openrouter_response) > 200 else openrouter_response)
+    # Do not log LLM response: it may contain reattached PHI after downstream processing
+    if openrouter_response:
+        print("    LLM response: received (length omitted for PHI)")
+    else:
+        print("    LLM response: none")
 
     # ── Step 8: Validate → PHI reattach → FHIR ───────────────────────────────
     print("\n[8] Building FHIR bundle...")
@@ -163,4 +165,6 @@ def run_pipeline(raw_text: str) -> dict:
 if __name__ == "__main__":
     from sample_text import text as raw_text
     result = run_pipeline(raw_text)
-    print("\n" + json.dumps(result, indent=2))
+    # Do not print full result: it contains reattached PHI
+    entry_count = len(result.get("entry", []))
+    print(f"\nPipeline complete. Bundle has {entry_count} entries.")

@@ -36,6 +36,18 @@ Uses a **RAG (Retrieval-Augmented Generation)** pipeline: payer policy PDFs are 
 
 ---
 
+## HIPAA & production readiness
+
+The system is built with HIPAA-minded safeguards that are feasible within the current scope:
+
+- **No persistent storage of ePHI:** The gateway and pipeline keep claim data only in memory. Pipeline results are removed after the client fetches them (or after a 10-minute TTL if never fetched), so ePHI is not retained at rest.
+- **Secure transport:** In production, all APIs (frontend–gateway and gateway–services) must use **HTTPS**. Set `NEXT_PUBLIC_API_URL` and all service URLs to `https://` endpoints; HTTP is for local development only.
+- **No PHI in logs:** Services do not log PHI or full claim payloads; only non-identifying metadata (e.g. pipeline_id, stage, timing) is logged in production.
+
+For a production deployment, additional steps are operational and contractual: authentication/authorization for result access, a Business Associate Agreement (BAA) with the LLM provider, and standard administrative safeguards (risk analysis, workforce training, incident response). The architecture is designed so that integrating this system into a production setting does not require re-architecting for HIPAA; it requires these production safeguards.
+
+---
+
 ## Pipeline Flow
 
 ```

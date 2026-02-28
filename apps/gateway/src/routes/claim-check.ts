@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import multer from "multer";
-import { createPipeline, getStatus, getResult } from "../state.js";
+import { createPipeline, getStatus, getResult, deletePipeline } from "../state.js";
 import {
   runPipeline,
   callScoring,
@@ -103,6 +103,8 @@ router.get("/status", (req: Request, res: Response) => {
     const result = getResult(jobId);
     if (result) {
       pollStatus.result = mapPipelineResultToComplianceCheckResponse(result);
+      // HIPAA: remove ePHI from memory after client receives result (result TTL)
+      deletePipeline(jobId);
     }
   }
 

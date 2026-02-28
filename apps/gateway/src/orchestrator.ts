@@ -426,9 +426,9 @@ async function callValidation(bundle: ClaimBundle): Promise<ValidationOutput> {
     } catch {
       // use raw body
     }
+    // Log status only; do not log response body (may contain claim/PHI)
     console.error(
-      `[orchestrator] Validation service error ${resp.status}:`,
-      detail,
+      `[orchestrator] Validation service error ${resp.status}`,
     );
     throw new Error(`Validation service error: ${resp.status} — ${detail}`);
   }
