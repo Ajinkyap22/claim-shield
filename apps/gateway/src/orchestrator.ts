@@ -1,13 +1,11 @@
 import {
   PipelineStage,
-  ICD10MappingSchema,
   ClaimBundleSchema,
   ClinicalValidationResultSchema,
   ClinicalContextSchema,
   PayerScoreBreakdownSchema,
 } from "@compliance-shield/shared";
 import type {
-  ICD10Mapping,
   ClaimBundle,
   ClinicalValidationResult,
   ClinicalContext,
@@ -93,27 +91,39 @@ export async function runPipeline(input: PipelineInput): Promise<void> {
       policyIngestResults,
     );
 
-    // Stage 3: ICD-10 / CPT Mapping (policy service is called first above)
+    // Only proceed to mapping when policy ingest succeeded (callPolicyIngest throws on any failure)
+    const policyFilesToIngest = (extracted.policyFiles ?? []).filter(
+      (f) => f.text?.trim() && !f.error,
+    );
+    if (policyFilesToIngest.length > 0 && policyIngestResults.length === 0) {
+      failPipeline(
+        pipelineId,
+        "Policy ingest produced no results; cannot proceed to mapping.",
+      );
+      return;
+    }
+
+    // Stage 3 & 4: Mapping + bundle via single /process call (data-extraction-pipe returns FHIR bundle)
     advanceStage(
       pipelineId,
       PipelineStage.MAPPING,
       "Mapping to ICD-10 / CPT codes...",
     );
-    const mappings = await callMappingCodes(rawText);
+    const bundle = await callProcess(rawText);
+    const mappingCount =
+      bundle.conditions.length + bundle.procedures.length;
     completeStage(
       pipelineId,
       PipelineStage.MAPPING,
-      `Found ${mappings.length} code mappings`,
-      mappings,
+      `Found ${mappingCount} code mappings`,
+      { count: mappingCount },
     );
 
-    // Stage 4: Build FHIR Bundle
     advanceStage(
       pipelineId,
       PipelineStage.BUILDING_BUNDLE,
       "Building FHIR record...",
     );
-    const bundle = await callBuildBundle(rawText, mappings);
     completeStage(
       pipelineId,
       PipelineStage.BUILDING_BUNDLE,
@@ -197,7 +207,7 @@ export interface PolicyIngestResult {
   criteria?: unknown[];
 }
 
-/** Send extracted policy text to the policy service; returns one result per document ingested. */
+/** Send extracted policy text to the policy service via multipart/form-data; returns one result per document ingested. */
 async function callPolicyIngest(
   policyFiles: ExtractedFile[],
 ): Promise<PolicyIngestResult[]> {
@@ -207,19 +217,17 @@ async function callPolicyIngest(
   for (const f of policyFiles) {
     if (!f.text?.trim() || f.error) continue;
     const url = `${config.policyServiceUrl}/policies/ingest`;
-    const body = {
-      text: f.text.trim(),
-      metadata: {
+    const form = new FormData();
+    form.append("text", f.text.trim());
+    form.append(
+      "metadata",
+      JSON.stringify({
         payer_id: "user",
         payer_name: "User",
         policy_name: f.fileName || "Policy",
-      },
-    };
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+      }),
+    );
+    const resp = await fetch(url, { method: "POST", body: form });
     if (!resp.ok) {
       const text = await resp.text();
       throw new Error(`Policy service ingest failed (${resp.status}): ${text}`);
@@ -265,30 +273,116 @@ async function callExtractFile(
   return (await resp.json()) as ExtractedResponse;
 }
 
-async function callMappingCodes(rawText: string): Promise<ICD10Mapping[]> {
-  const url = `${config.mappingServiceUrl}/map-codes`;
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ raw_text: rawText }),
-  });
-  if (!resp.ok) throw new Error(`Mapping service error: ${resp.status}`);
-  const data = (await resp.json()) as { mappings: unknown[] };
-  return data.mappings.map((m) => ICD10MappingSchema.parse(m));
+/** FHIR R4 Bundle entry from data-extraction-pipe (resourceType on resource). */
+interface FhirBundleEntry {
+  resource?: {
+    resourceType?: string;
+    name?: Array<{ text?: string }>;
+    birthDate?: string;
+    code?: { coding?: Array<{ code?: string; display?: string }> };
+    status?: string;
+    performedDateTime?: string;
+    diagnosis?: Array<{ diagnosisReference?: { reference?: string } }>;
+    item?: Array<{
+      productOrService?: { coding?: Array<{ code?: string }> };
+    }>;
+    type?: { coding?: Array<{ code?: string }> };
+    priority?: { coding?: Array<{ code?: string }> };
+    created?: string;
+    provider?: { reference?: string };
+  };
 }
 
-async function callBuildBundle(
-  rawText: string,
-  mappings: ICD10Mapping[],
-): Promise<ClaimBundle> {
-  const url = `${config.mappingServiceUrl}/build-bundle`;
+/** Convert FHIR R4 Bundle from data-extraction-pipe to ClaimBundle for validation/scoring. */
+function fhirBundleToClaimBundle(fhir: {
+  entry?: FhirBundleEntry[];
+}): ClaimBundle {
+  const entries = fhir.entry ?? [];
+  const patientRes = entries.find(
+    (e) => e.resource?.resourceType === "Patient",
+  )?.resource;
+  const conditionsRes = entries.filter(
+    (e) => e.resource?.resourceType === "Condition",
+  );
+  const proceduresRes = entries.filter(
+    (e) => e.resource?.resourceType === "Procedure",
+  );
+  const claimRes = entries.find(
+    (e) => e.resource?.resourceType === "Claim",
+  )?.resource;
+
+  const patient = {
+    name: patientRes?.name?.[0]?.text ?? "Unknown",
+    dob: patientRes?.birthDate ?? "",
+    gender: "male" as const,
+    member_id: null,
+    payer_id: null,
+  };
+
+  const conditions = conditionsRes.map((e) => {
+    const c = e.resource?.code?.coding?.[0];
+    return {
+      code: c?.code ?? "",
+      display: c?.display ?? "",
+      clinical_status: "active" as const,
+      onset_date: null,
+      severity: null,
+    };
+  });
+
+  const procedures = proceduresRes.map((e) => {
+    const c = e.resource?.code?.coding?.[0];
+    return {
+      code: c?.code ?? "",
+      display: c?.display ?? "",
+      status: (e.resource?.status === "completed"
+        ? "completed"
+        : "proposed") as "completed" | "proposed" | "in-progress",
+      date: e.resource?.performedDateTime ?? null,
+      body_site: null,
+    };
+  });
+
+  const diagnosisCodes = conditions.map((c) => c.code);
+  const procedureCodes = procedures.map((p) => p.code);
+
+  const claim = {
+    claim_type: "professional" as const,
+    priority: (claimRes?.priority?.coding?.[0]?.code as "normal" | "urgent") ?? "normal",
+    diagnosis_codes: diagnosisCodes,
+    procedure_codes: procedureCodes,
+    medication_codes: [] as string[],
+    provider_npi: null,
+    facility_type: null,
+    service_date: claimRes?.created ?? null,
+  };
+
+  return ClaimBundleSchema.parse({
+    patient,
+    conditions,
+    procedures,
+    medications: [],
+    claim,
+    supporting_info: {},
+  });
+}
+
+/** Call mapping service /process; returns ClaimBundle (converted from FHIR bundle). */
+async function callProcess(rawText: string): Promise<ClaimBundle> {
+  const url = `${config.mappingServiceUrl}/process`;
   const resp = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ raw_text: rawText, mappings }),
+    body: JSON.stringify({ text: rawText }),
   });
-  if (!resp.ok) throw new Error(`Bundle build error: ${resp.status}`);
-  return ClaimBundleSchema.parse(await resp.json());
+  if (!resp.ok) throw new Error(`Mapping service error: ${resp.status}`);
+  const data = (await resp.json()) as {
+    fhir_bundle?: { entry?: FhirBundleEntry[] };
+  };
+  const fhir = data.fhir_bundle && typeof data.fhir_bundle === "object"
+    ? { entry: data.fhir_bundle.entry ?? [] }
+    : { entry: [] };
+  return fhirBundleToClaimBundle(fhir);
 }
 
 async function callValidation(bundle: ClaimBundle): Promise<ValidationOutput> {

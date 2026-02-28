@@ -6,8 +6,5 @@ export const config = {
   mappingServiceUrl: process.env.MAPPING_SERVICE_URL || "http://localhost:8002",
   validationServiceUrl:
     process.env.VALIDATION_SERVICE_URL || "http://localhost:8003",
-  scoringServiceUrl:
-    process.env.SCORING_SERVICE_URL || "http://localhost:8004",
-  policyServiceUrl:
-    process.env.POLICY_SERVICE_URL || "http://localhost:8005",
+  scoringServiceUrl: process.env.SCORING_SERVICE_URL || "http://localhost:8004",
 };
