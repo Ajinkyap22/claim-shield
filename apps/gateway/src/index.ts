@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { config } from "./config.js";
-import pipelineRouter from "./routes/pipeline.js";
+import claimCheckRouter from "./routes/claim-check.js";
 import fixturesRouter from "./routes/fixtures.js";
 import healthRouter from "./routes/health.js";
 
@@ -12,7 +12,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", healthRouter);
-app.use("/api/pipeline", pipelineRouter);
+app.use("/api/v1/claim-check", claimCheckRouter);
 app.use("/api/fixtures", fixturesRouter);
 
 app.listen(config.port, () => {

@@ -1,6 +1,5 @@
 import {
   PipelineStage,
-  ExtractionResultSchema,
   ICD10MappingSchema,
   ClaimBundleSchema,
   ClinicalValidationResultSchema,
@@ -8,7 +7,6 @@ import {
   PayerScoreBreakdownSchema,
 } from "@compliance-shield/shared";
 import type {
-  ExtractionResult,
   ICD10Mapping,
   ClaimBundle,
   ClinicalValidationResult,
@@ -24,13 +22,34 @@ import {
   finishPipeline,
 } from "./state.js";
 
-interface PipelineInput {
+/** File part for extract-file request (frontend-shaped input). */
+export interface PipelineFilePart {
+  buffer: Buffer;
+  mimetype: string;
+  originalname: string;
+}
+
+export interface PipelineInput {
   pipelineId: string;
-  fileBuffer?: Buffer;
-  fileContentType?: string;
-  fileName?: string;
-  text?: string;
+  clinicalNote: string;
+  audioFiles: PipelineFilePart[];
+  policyFiles: PipelineFilePart[];
+  documentationFiles: PipelineFilePart[];
   payers: string[];
+}
+
+/** Response from extract-file service (Go ExtractedResponse). */
+export interface ExtractedFile {
+  fileName: string;
+  text: string;
+  error?: string;
+}
+
+export interface ExtractedResponse {
+  clinicalNote: string;
+  audioFiles: ExtractedFile[];
+  policyFiles: ExtractedFile[];
+  documentationFiles: ExtractedFile[];
 }
 
 interface ValidationOutput {
@@ -43,59 +62,81 @@ export async function runPipeline(input: PipelineInput): Promise<void> {
   const start = Date.now();
 
   try {
-    // Stage 1: Extraction
-    advanceStage(pipelineId, PipelineStage.EXTRACTING, "Extracting clinical data...");
-    const extraction = await callExtraction(input);
+    // Stage 1: Extraction via extract-file service
+    advanceStage(
+      pipelineId,
+      PipelineStage.EXTRACTING,
+      "Extracting clinical data...",
+    );
+    const extracted = await callExtractFile(input);
+    const rawText = mergeExtractedResponse(extracted);
     completeStage(
       pipelineId,
       PipelineStage.EXTRACTING,
-      `Extracted ${extraction.raw_text.length} chars from ${extraction.source_type}`,
-      extraction
+      `Extracted ${rawText.length} chars from clinical note and files`,
+      extracted,
     );
 
     // Stage 2: ICD-10 / CPT Mapping
-    advanceStage(pipelineId, PipelineStage.MAPPING, "Mapping to ICD-10 / CPT codes...");
-    const mappings = await callMappingCodes(extraction.raw_text);
+    advanceStage(
+      pipelineId,
+      PipelineStage.MAPPING,
+      "Mapping to ICD-10 / CPT codes...",
+    );
+    const mappings = await callMappingCodes(rawText);
     completeStage(
       pipelineId,
       PipelineStage.MAPPING,
       `Found ${mappings.length} code mappings`,
-      mappings
+      mappings,
     );
 
     // Stage 3: Build FHIR Bundle
-    advanceStage(pipelineId, PipelineStage.BUILDING_BUNDLE, "Building FHIR record...");
-    const bundle = await callBuildBundle(extraction.raw_text, mappings);
+    advanceStage(
+      pipelineId,
+      PipelineStage.BUILDING_BUNDLE,
+      "Building FHIR record...",
+    );
+    const bundle = await callBuildBundle(rawText, mappings);
     completeStage(
       pipelineId,
       PipelineStage.BUILDING_BUNDLE,
       "FHIR-like claim bundle ready",
-      bundle
+      bundle,
     );
 
     // Stage 4: Clinical Validation + Fact Extraction
-    advanceStage(pipelineId, PipelineStage.VALIDATING, "Validating clinical documentation...");
-    const { validation_result, clinical_context } = await callValidation(bundle);
+    advanceStage(
+      pipelineId,
+      PipelineStage.VALIDATING,
+      "Validating clinical documentation...",
+    );
+    const { validation_result, clinical_context } =
+      await callValidation(bundle);
     completeStage(
       pipelineId,
       PipelineStage.VALIDATING,
       `Validation: ${validation_result.overall_status}`,
-      { validation_result, clinical_context }
+      { validation_result, clinical_context },
     );
 
     // Stage 5: Payer Denial Scoring
-    advanceStage(pipelineId, PipelineStage.SCORING, "Scoring against payer policies...");
+    advanceStage(
+      pipelineId,
+      PipelineStage.SCORING,
+      "Scoring against payer policies...",
+    );
     const payerScores = await callScoring(
       bundle,
       validation_result,
       clinical_context,
-      payers
+      payers,
     );
     completeStage(
       pipelineId,
       PipelineStage.SCORING,
       "Denial scores computed for all payers",
-      payerScores
+      payerScores,
     );
 
     const elapsed = (Date.now() - start) / 1000;
@@ -115,27 +156,53 @@ export async function runPipeline(input: PipelineInput): Promise<void> {
 
 // -- Service call helpers --
 
-async function callExtraction(input: PipelineInput): Promise<ExtractionResult> {
-  const url = `${config.extractionServiceUrl}/extract`;
+/** Merges clinical note + audio + documentation into one string for mapping. Policy data is excluded and will be handled by a separate policy service. */
+function mergeExtractedResponse(res: ExtractedResponse): string {
+  const parts: string[] = [];
+  if (res.clinicalNote?.trim()) parts.push(res.clinicalNote.trim());
+  for (const f of res.audioFiles ?? []) {
+    if (f.text?.trim() && !f.error) parts.push(f.text.trim());
+  }
+  for (const f of res.documentationFiles ?? []) {
+    if (f.text?.trim() && !f.error) parts.push(f.text.trim());
+  }
+  // Policy files are not included here; a separate policy service will use them.
+  return parts.join("\n\n") || "";
+}
 
-  let resp: Response;
-  if (input.fileBuffer && input.fileContentType) {
-    const form = new FormData();
-    const blob = new Blob([input.fileBuffer], { type: input.fileContentType });
-    form.append("file", blob, input.fileName || "upload");
-    resp = await fetch(url, { method: "POST", body: form });
-  } else if (input.text) {
-    resp = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: input.text }),
-    });
-  } else {
-    throw new Error("Either file or text must be provided");
+async function callExtractFile(
+  input: PipelineInput,
+): Promise<ExtractedResponse> {
+  const url = `${config.extractFileServiceUrl}/api/extract`;
+  const form = new FormData();
+  form.append("clinicalNote", input.clinicalNote ?? "");
+
+  for (const f of input.audioFiles ?? []) {
+    const blob = new Blob([new Uint8Array(f.buffer)], { type: f.mimetype });
+    form.append("audioFiles", blob, f.originalname || "audio");
+  }
+  for (const f of input.policyFiles ?? []) {
+    const blob = new Blob([new Uint8Array(f.buffer)], { type: f.mimetype });
+    form.append("policyFiles", blob, f.originalname || "policy");
+  }
+  for (const f of input.documentationFiles ?? []) {
+    const blob = new Blob([new Uint8Array(f.buffer)], { type: f.mimetype });
+    form.append("documentationFiles", blob, f.originalname || "documentation");
   }
 
-  if (!resp.ok) throw new Error(`Extraction service error: ${resp.status}`);
-  return ExtractionResultSchema.parse(await resp.json());
+  const hasFiles =
+    (input.audioFiles?.length ?? 0) > 0 ||
+    (input.policyFiles?.length ?? 0) > 0 ||
+    (input.documentationFiles?.length ?? 0) > 0;
+  if (!input.clinicalNote?.trim() && !hasFiles) {
+    throw new Error(
+      "Either clinicalNote or at least one file must be provided",
+    );
+  }
+
+  const resp = await fetch(url, { method: "POST", body: form });
+  if (!resp.ok) throw new Error(`Extract-file service error: ${resp.status}`);
+  return (await resp.json()) as ExtractedResponse;
 }
 
 async function callMappingCodes(rawText: string): Promise<ICD10Mapping[]> {
@@ -152,7 +219,7 @@ async function callMappingCodes(rawText: string): Promise<ICD10Mapping[]> {
 
 async function callBuildBundle(
   rawText: string,
-  mappings: ICD10Mapping[]
+  mappings: ICD10Mapping[],
 ): Promise<ClaimBundle> {
   const url = `${config.mappingServiceUrl}/build-bundle`;
   const resp = await fetch(url, {
@@ -164,9 +231,7 @@ async function callBuildBundle(
   return ClaimBundleSchema.parse(await resp.json());
 }
 
-async function callValidation(
-  bundle: ClaimBundle
-): Promise<ValidationOutput> {
+async function callValidation(bundle: ClaimBundle): Promise<ValidationOutput> {
   const url = `${config.validationServiceUrl}/validate`;
   const resp = await fetch(url, {
     method: "POST",
@@ -177,7 +242,9 @@ async function callValidation(
 
   const data = (await resp.json()) as Record<string, unknown>;
   return {
-    validation_result: ClinicalValidationResultSchema.parse(data.validation_result),
+    validation_result: ClinicalValidationResultSchema.parse(
+      data.validation_result,
+    ),
     clinical_context: ClinicalContextSchema.parse(data.clinical_context),
   };
 }
@@ -186,7 +253,7 @@ async function callScoring(
   bundle: ClaimBundle,
   validation: ClinicalValidationResult,
   clinicalContext: ClinicalContext,
-  payers: string[]
+  payers: string[],
 ): Promise<Record<string, PayerScoreBreakdown>> {
   const url = `${config.scoringServiceUrl}/score`;
   const resp = await fetch(url, {

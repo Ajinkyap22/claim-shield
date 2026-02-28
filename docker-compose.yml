@@ -7,12 +7,12 @@ services:
       - "8000:8000"
     env_file: .env
     depends_on:
-      - extraction-service
+      - extract-file
       - mapping-service
       - validation-service
       - scoring-service
     environment:
-      EXTRACTION_SERVICE_URL: http://extraction-service:8001
+      EXTRACT_FILE_SERVICE_URL: http://extract-file:8080
       MAPPING_SERVICE_URL: http://mapping-service:8002
       VALIDATION_SERVICE_URL: http://validation-service:8003
       SCORING_SERVICE_URL: http://scoring-service:8004
