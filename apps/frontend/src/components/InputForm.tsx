@@ -16,6 +16,110 @@ import {
 } from "lucide-react";
 import type { ComplianceCheckPayload } from "@/types/compliance";
 
+/** Real-time bar visualizer during recording. Uses Web Audio API — no external deps. */
+function LiveAudioVisualizer({ stream }: { stream: MediaStream }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const audioCtx = new AudioContext();
+    const source = audioCtx.createMediaStreamSource(stream);
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 128;
+    source.connect(analyser);
+
+    const ctx2d = canvas.getContext("2d");
+    if (!ctx2d) return;
+
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    let animId: number;
+
+    const draw = () => {
+      analyser.getByteFrequencyData(data);
+      ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+      const barW = 3, gap = 2, step = barW + gap;
+      const count = Math.floor(canvas.width / step);
+      for (let i = 0; i < count; i++) {
+        const val = data[Math.floor((i * data.length) / count)] / 255;
+        const h = Math.max(2, val * canvas.height);
+        ctx2d.fillStyle = "#0d9488";
+        ctx2d.fillRect(i * step, canvas.height - h, barW, h);
+      }
+      animId = requestAnimationFrame(draw);
+    };
+
+    draw();
+    return () => {
+      cancelAnimationFrame(animId);
+      source.disconnect();
+      audioCtx.close();
+    };
+  }, [stream]);
+
+  return <canvas ref={canvasRef} width={260} height={32} style={{ display: "block" }} />;
+}
+
+/** Static waveform from a recorded/uploaded blob with played-progress highlight. */
+function AudioVisualizer({ blob, currentTime }: { blob: Blob; currentTime: number }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const pcmRef = useRef<Float32Array | null>(null);
+  const durationRef = useRef(0);
+
+  // Decode PCM once when blob changes
+  useEffect(() => {
+    let cancelled = false;
+    blob.arrayBuffer().then((buf) => {
+      if (cancelled) return;
+      const ctx = new AudioContext();
+      ctx.decodeAudioData(buf, (audioBuffer) => {
+        if (cancelled) return;
+        pcmRef.current = audioBuffer.getChannelData(0);
+        durationRef.current = audioBuffer.duration;
+        ctx.close();
+        // Trigger an immediate repaint at time=0
+        drawWaveform(canvasRef.current, pcmRef.current, durationRef.current, 0);
+      });
+    });
+    return () => { cancelled = true; };
+  }, [blob]);
+
+  // Repaint whenever currentTime changes
+  useEffect(() => {
+    drawWaveform(canvasRef.current, pcmRef.current, durationRef.current, currentTime);
+  }, [currentTime]);
+
+  return <canvas ref={canvasRef} width={200} height={32} style={{ display: "block" }} />;
+}
+
+function drawWaveform(
+  canvas: HTMLCanvasElement | null,
+  pcm: Float32Array | null,
+  duration: number,
+  currentTime: number,
+) {
+  if (!canvas || !pcm) return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const { width, height } = canvas;
+  ctx.clearRect(0, 0, width, height);
+  const barW = 3, gap = 2, step = barW + gap;
+  const count = Math.floor(width / step);
+  const samplesPerBar = Math.floor(pcm.length / count);
+  const playedFrac = duration > 0 ? currentTime / duration : 0;
+  for (let i = 0; i < count; i++) {
+    let peak = 0;
+    for (let j = 0; j < samplesPerBar; j++) {
+      const s = Math.abs(pcm[i * samplesPerBar + j] ?? 0);
+      if (s > peak) peak = s;
+    }
+    const h = Math.max(2, peak * height);
+    ctx.fillStyle = i / count < playedFrac ? "#0d9488" : "#5eead4";
+    ctx.fillRect(i * step, height - h, barW, h);
+  }
+}
+
 type AudioStatus =
   | "idle"
   | "recording"
@@ -129,62 +233,6 @@ const MOCK_TRANSCRIPT =
 
 const DOC_IMAGE_ACCEPT = ".pdf,.doc,.docx,.txt,image/*";
 
-/** Seed heights for waveform bars; repeated to fill width. */
-const WAVEFORM_SEED = [
-  40, 65, 35, 90, 85, 70, 30, 90, 10, 20, 38, 75, 42, 85, 48,
-];
-const BAR_WIDTH_PX = 4;
-const MIN_BARS = 24;
-const MAX_BARS = 280;
-
-function AudioWaveform({ isPlaying }: { isPlaying: boolean }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [barCount, setBarCount] = useState(MIN_BARS);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const updateCount = () => {
-      const w = el.offsetWidth;
-      const count = Math.min(
-        MAX_BARS,
-        Math.max(MIN_BARS, Math.floor(w / BAR_WIDTH_PX)),
-      );
-      setBarCount(count);
-    };
-    updateCount();
-    const ro = new ResizeObserver(updateCount);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  const heights = Array.from(
-    { length: barCount },
-    (_, i) => WAVEFORM_SEED[i % WAVEFORM_SEED.length],
-  );
-
-  return (
-    <div
-      ref={containerRef}
-      className="flex items-end gap-0.5 h-8 w-full min-w-0 flex-1"
-      aria-hidden
-    >
-      {heights.map((h, i) => (
-        <div
-          key={i}
-          className="flex-1 min-w-[2px] rounded-full transition-all duration-150"
-          style={{
-            height: `${h}%`,
-            maxHeight: "100%",
-            backgroundColor: isPlaying ? "var(--teal-600)" : "var(--teal-500)",
-            opacity: isPlaying ? 1 : 0.8,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
 export function InputForm({ onSubmit, loading }: InputFormProps) {
   const [note, setNote] = useState("");
   const [audioStatus, setAudioStatus] = useState<AudioStatus>("idle");
@@ -197,10 +245,12 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
   const audioFileRef = useRef<HTMLInputElement>(null);
   const policyFileRef = useRef<HTMLInputElement>(null);
   const docImageFileRef = useRef<HTMLInputElement>(null);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
+  const [currentAudioTime, setCurrentAudioTime] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
 
@@ -230,8 +280,10 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
     const audio = audioRef.current || new Audio();
     audioRef.current = audio;
     audio.src = url;
+    audio.ontimeupdate = () => setCurrentAudioTime(audio.currentTime);
     audio.onended = () => {
       setPlayingIndex(null);
+      setCurrentAudioTime(0);
       if (audioUrlRef.current) {
         URL.revokeObjectURL(audioUrlRef.current);
         audioUrlRef.current = null;
@@ -248,6 +300,7 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
       recordingChunksRef.current = [];
       const recorder = new MediaRecorder(stream);
       mediaRecorderRef.current = recorder;
+      setMediaRecorder(recorder);
       recorder.ondataavailable = (e) => {
         if (e.data.size) recordingChunksRef.current.push(e.data);
       };
@@ -283,6 +336,7 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
         });
         setAudioFiles((prev) => [...prev, file]);
         setAudioStatus("transcribed");
+        setMediaRecorder(null);
         stream?.getTracks().forEach((t) => t.stop());
       };
       recorder.stop();
@@ -311,6 +365,8 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
       audioUrlRef.current = null;
     }
     setPlayingIndex(null);
+    setCurrentAudioTime(0);
+    setMediaRecorder(null);
     setAudioStatus("idle");
     setRecordingSeconds(0);
     setAudioFiles([]);
@@ -571,24 +627,29 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
             )}
 
             {audioStatus === "recording" && (
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
-                  <span
-                    className="text-red-600"
-                    style={{ fontSize: "0.8rem", fontWeight: 600 }}
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
+                    <span
+                      className="text-red-600"
+                      style={{ fontSize: "0.8rem", fontWeight: 600 }}
+                    >
+                      Recording {formatTime(recordingSeconds)}
+                    </span>
+                  </div>
+                  <button
+                    onClick={stopRecording}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors"
+                    style={{ fontSize: "0.75rem" }}
                   >
-                    Recording {formatTime(recordingSeconds)}
-                  </span>
+                    <Square className="w-3 h-3 fill-current" />
+                    Stop
+                  </button>
                 </div>
-                <button
-                  onClick={stopRecording}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors"
-                  style={{ fontSize: "0.75rem" }}
-                >
-                  <Square className="w-3 h-3 fill-current" />
-                  Stop
-                </button>
+                {mediaRecorder && (
+                  <LiveAudioVisualizer stream={mediaRecorder.stream} />
+                )}
               </div>
             )}
 
@@ -622,7 +683,10 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
                         )}
                       </button>
                       <div className="flex-1 min-w-0 flex items-center w-full">
-                        <AudioWaveform isPlaying={playingIndex === i} />
+                        <AudioVisualizer
+                          blob={file}
+                          currentTime={playingIndex === i ? currentAudioTime : 0}
+                        />
                       </div>
                     </div>
                   ))}
