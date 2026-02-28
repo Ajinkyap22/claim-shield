@@ -12,7 +12,7 @@ import {
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
-const DEFAULT_PAYERS = ["uhc", "aetna", "cigna"];
+const DEFAULT_PAYERS = ["uhc", "aetna"];
 
 function toFilePart(f: Express.Multer.File): PipelineFilePart {
   return {
