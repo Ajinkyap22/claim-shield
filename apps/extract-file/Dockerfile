@@ -10,10 +10,13 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /extract-file .
 
 FROM alpine:3.20
 
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates netcat-openbsd
 
 COPY --from=builder /extract-file /usr/local/bin/extract-file
 
 EXPOSE 8080
+
+HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=5 \
+    CMD nc -z localhost 8080 || exit 1
 
 CMD ["extract-file"]

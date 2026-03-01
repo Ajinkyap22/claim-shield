@@ -1,79 +1,128 @@
 services:
-  gateway:
-    build:
-      context: .
-      dockerfile: apps/gateway/Dockerfile
-    ports:
-      - "8000:8000"
-    env_file: .env
-    depends_on:
-      - extract-file
-      - mapping-service
-      - validation-service
-      - scoring-service
-      - policy-service
-    environment:
-      EXTRACT_FILE_SERVICE_URL: http://extract-file:8080
-      MAPPING_SERVICE_URL: http://mapping-service:8002
-      VALIDATION_SERVICE_URL: http://validation-service:8003
-      SCORING_SERVICE_URL: http://scoring-service:8004
-      POLICY_SERVICE_URL: http://policy-service:8005
 
-  mapping-service:
-    image: python:3.11-slim
-    working_dir: /app
-    command: sh -c "pip install --no-cache-dir -r requirements.txt && uvicorn api:app --host 0.0.0.0 --port 8000"
-    volumes:
-      - ./apps/data-extraction-pipe:/app
-    ports:
-      - "8002:8000"
-    env_file:
-      - apps/data-extraction-pipe/.env
-
-  validation-service:
-    image: node:20-slim
-    working_dir: /app/apps/validation-service
-    command: sh -c "npm install --prefix /app/apps/shared-ts && npm run --prefix /app/apps/shared-ts build && npm install && npm run dev"
-    volumes:
-      - .:/app
-    ports:
-      - "8003:8003"
-    env_file:
-      - apps/validation-service/.env
-
-  scoring-service:
-    image: node:20-slim
-    working_dir: /app/apps/scoring-service
-    command: sh -c "npm install --prefix /app/apps/shared-ts && npm run --prefix /app/apps/shared-ts build && npm install && npm run dev"
-    volumes:
-      - .:/app
-    ports:
-      - "8004:8004"
-    env_file:
-      - apps/scoring-service/.env
-    depends_on:
-      - policy-service
-    environment:
-      POLICY_SERVICE_URL: http://policy-service:8005
-
-  policy-service:
-    image: node:20-slim
-    working_dir: /app/apps/policy-service
-    command: sh -c "npm install --prefix /app/apps/shared-ts && npm run --prefix /app/apps/shared-ts build && npm install && npm run dev"
-    volumes:
-      - .:/app
-    ports:
-      - "8005:8005"
-    env_file: .env
-
+  # ── extract-file (Go) ─ port 8080 ────────────────────────────────────────────
   extract-file:
     build:
       context: .
       dockerfile: apps/extract-file/Dockerfile
     ports:
       - "8080:8080"
-    env_file: .env
+    env_file:
+      - apps/extract-file/.env
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8080"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
 
+  # ── mapping-service / data-extraction-pipe (Python) ─ port 8002 ──────────────
+  mapping-service:
+    build:
+      context: apps/data-extraction-pipe
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    env_file:
+      - apps/data-extraction-pipe/.env
+    volumes:
+      - chroma_data:/app/data/chroma_db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 15s
+      timeout: 10s
+      start_period: 90s
+      retries: 8
+
+  # ── policy-service (Node.js) ─ port 8005 ─────────────────────────────────────
+  policy-service:
+    build:
+      context: .
+      dockerfile: apps/policy-service/Dockerfile
+    ports:
+      - "8005:8005"
+    env_file:
+      - apps/policy-service/.env
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8005/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
+  # ── validation-service (Node.js) ─ port 8003 ─────────────────────────────────
+  validation-service:
+    build:
+      context: .
+      dockerfile: apps/validation-service/Dockerfile
+    ports:
+      - "8003:8003"
+    env_file:
+      - apps/validation-service/.env
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8003/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
+  # ── scoring-service (Node.js) ─ port 8004 ────────────────────────────────────
+  scoring-service:
+    build:
+      context: .
+      dockerfile: apps/scoring-service/Dockerfile
+    ports:
+      - "8004:8004"
+    env_file:
+      - apps/scoring-service/.env
+    environment:
+      # Override localhost default so scoring-service reaches policy-service inside Docker
+      POLICY_SERVICE_URL: http://policy-service:8005
+    depends_on:
+      policy-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8004/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
+  # ── gateway (Node.js) ─ port 8000 ────────────────────────────────────────────
+  gateway:
+    build:
+      context: .
+      dockerfile: apps/gateway/Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - apps/gateway/.env
+    environment:
+      # Override localhost defaults so gateway reaches all services inside Docker
+      EXTRACT_FILE_SERVICE_URL: http://extract-file:8080
+      MAPPING_SERVICE_URL: http://mapping-service:8002
+      POLICY_SERVICE_URL: http://policy-service:8005
+      VALIDATION_SERVICE_URL: http://validation-service:8003
+      SCORING_SERVICE_URL: http://scoring-service:8004
+    depends_on:
+      extract-file:
+        condition: service_healthy
+      mapping-service:
+        condition: service_healthy
+      policy-service:
+        condition: service_healthy
+      validation-service:
+        condition: service_healthy
+      scoring-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8000/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
+  # ── frontend (Next.js) ─ port 3000 ───────────────────────────────────────────
   frontend:
     build:
       context: ./apps/frontend
@@ -81,6 +130,12 @@ services:
     ports:
       - "3000:3000"
     environment:
+      # Browser fetches the API through the host machine, so localhost:8000 is correct
       NEXT_PUBLIC_API_URL: http://localhost:8000
     depends_on:
-      - gateway
+      gateway:
+        condition: service_healthy
+
+volumes:
+  # ChromaDB vector index — persists ICD/CPT embeddings across container restarts
+  chroma_data:

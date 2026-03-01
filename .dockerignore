@@ -1,0 +1,24 @@
+# Node
+**/node_modules/
+**/dist/
+**/.next/
+**/.turbo/
+
+# Python
+**/.venv/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+
+# ChromaDB / local data
+**/data/chroma_db/
+**/db/*.db
+
+# Logs / temp
+**/.service-logs/
+**/.service-pids
+**/logs/
+
+# Editor / OS
+**/.DS_Store
+**/.env.local
