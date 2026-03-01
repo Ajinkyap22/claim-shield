@@ -2,8 +2,12 @@
 LLM client: OpenRouter integration for claim-shield.
 Get your API key at https://openrouter.ai/settings/keys
 """
+import concurrent.futures
+import logging
 import os
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Load .env from this directory or project root (so OPENROUTER_* are set)
 try:
@@ -15,6 +19,7 @@ except ImportError:
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
+LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT_SECONDS", "30"))
 
 
 # Base prompt — placeholders allow PHI to be reattached from DB after LLM call
@@ -65,9 +70,12 @@ def query_openrouter(
         entities: List of NER entity dicts with 'word' and 'entity_group' keys.
         text: Scrubbed clinical note text (PHI already removed).
         prompt_instruction: Custom instruction string. Defaults to DEFAULT_PROMPT.
+
+    Returns:
+        LLM response string, or None if unavailable/timed out.
     """
     if not OPENROUTER_API_KEY:
-        print("OPENROUTER_API_KEY not set; skipping LLM call.")
+        logger.info("OPENROUTER_API_KEY not set; skipping LLM call.")
         return None
     try:
         from openrouter import OpenRouter
@@ -76,7 +84,6 @@ def query_openrouter(
             for e in entities
         )
         instruction = prompt_instruction if prompt_instruction is not None else DEFAULT_PROMPT
-        # Send full text — truncation loses procedures in longer notes
         prompt = (
             f"Given this clinical note and the entities extracted by NER:\n\n"
             f"Entities extracted:\n{entities_str}\n\n"
@@ -84,12 +91,32 @@ def query_openrouter(
             f"{instruction}"
         )
 
-        with OpenRouter(api_key=OPENROUTER_API_KEY) as client:
-            response = client.chat.send(
-                model=OPENROUTER_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-            )
+        def _call() -> str:
+            with OpenRouter(api_key=OPENROUTER_API_KEY) as client:
+                return client.chat.send(
+                    model=OPENROUTER_MODEL,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+
+        # Enforce timeout — OpenRouter SDK has no native timeout parameter
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_call)
+            try:
+                response = future.result(timeout=LLM_TIMEOUT)
+            except concurrent.futures.TimeoutError:
+                logger.warning("LLM call timed out after %ds; using vector fallback.", LLM_TIMEOUT)
+                return None
+
+        # Guard against empty choices (malformed LLM response)
+        if not response or not getattr(response, "choices", None):
+            logger.warning("LLM returned empty or malformed response.")
+            return None
+
         return response.choices[0].message.content
+
     except ImportError:
-        print("Install OpenRouter SDK: pip install openrouter")
+        logger.warning("OpenRouter SDK not installed: pip install openrouter")
+        return None
+    except Exception:
+        logger.exception("LLM call failed; using vector fallback.")
         return None
