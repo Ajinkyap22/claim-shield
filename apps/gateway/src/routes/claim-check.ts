@@ -155,7 +155,7 @@ router.get("/payer-comparison", async (req: Request, res: Response) => {
   }
 
   try {
-    const comparisonScores = await callScoring(
+    const { scores: comparisonScores } = await callScoring(
       result.claim_bundle,
       result.validation_result,
       result.clinical_context,

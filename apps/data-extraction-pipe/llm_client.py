@@ -57,7 +57,7 @@ def query_openrouter(
     entities: list,
     text: str,
     prompt_instruction: str | None = None,
-) -> str | None:
+) -> tuple[str | None, dict | None]:
     """
     Send extracted entities and clinical note to OpenRouter for structured extraction.
 
@@ -65,10 +65,13 @@ def query_openrouter(
         entities: List of NER entity dicts with 'word' and 'entity_group' keys.
         text: Scrubbed clinical note text (PHI already removed).
         prompt_instruction: Custom instruction string. Defaults to DEFAULT_PROMPT.
+
+    Returns:
+        Tuple of (content, usage_dict). usage_dict has keys: model, prompt_tokens, completion_tokens, total_tokens.
     """
     if not OPENROUTER_API_KEY:
         print("OPENROUTER_API_KEY not set; skipping LLM call.")
-        return None
+        return None, None
     try:
         from openrouter import OpenRouter
         entities_str = "\n".join(
@@ -89,7 +92,17 @@ def query_openrouter(
                 model=OPENROUTER_MODEL,
                 messages=[{"role": "user", "content": prompt}],
             )
-        return response.choices[0].message.content
+
+        usage = None
+        if hasattr(response, "usage") and response.usage:
+            usage = {
+                "model": getattr(response, "model", OPENROUTER_MODEL) or OPENROUTER_MODEL,
+                "prompt_tokens": getattr(response.usage, "prompt_tokens", 0) or 0,
+                "completion_tokens": getattr(response.usage, "completion_tokens", 0) or 0,
+                "total_tokens": getattr(response.usage, "total_tokens", 0) or 0,
+            }
+
+        return response.choices[0].message.content, usage
     except ImportError:
         print("Install OpenRouter SDK: pip install openrouter")
-        return None
+        return None, None

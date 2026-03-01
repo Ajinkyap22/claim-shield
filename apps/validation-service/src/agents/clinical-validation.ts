@@ -13,6 +13,7 @@ import type {
   CheckResult,
   ClinicalValidationResult,
   ClinicalContext,
+  LLMCallUsage,
 } from "@compliance-shield/shared";
 import {
   CheckResultSchema,
@@ -102,10 +103,15 @@ function bundleSummary(bundle: ClaimBundle): string {
   return lines.join("\n");
 }
 
+interface LLMCheckResult {
+  result: CheckResult;
+  usage: LLMCallUsage | null;
+}
+
 async function llmCheck(
   systemPrompt: string,
   bundle: ClaimBundle
-): Promise<CheckResult> {
+): Promise<LLMCheckResult> {
   const fullPrompt = systemPrompt + `
 
 Display rules (required):
@@ -124,13 +130,23 @@ IMPORTANT: Respond with ONLY raw JSON (no markdown, no code fences). Use this ex
       { role: "user", content: `Evaluate this claim:\n\n${summary}` },
     ],
   });
+
+  const usage: LLMCallUsage | null = response.usage
+    ? {
+        model: response.model ?? config.openrouterModel,
+        prompt_tokens: response.usage.prompt_tokens,
+        completion_tokens: response.usage.completion_tokens,
+        total_tokens: response.usage.total_tokens,
+      }
+    : null;
+
   const raw = JSON.parse(stripCodeFences(response.choices[0].message.content!));
-  return normalizeCheckResult(raw);
+  return { result: normalizeCheckResult(raw), usage };
 }
 
 async function checkMedicalNecessity(
   bundle: ClaimBundle
-): Promise<CheckResult> {
+): Promise<LLMCheckResult> {
   return llmCheck(
     `You are a clinical reviewer assessing medical necessity for insurance prior authorization.
 
@@ -150,7 +166,7 @@ Write findings and recommendations in brief, provider-facing language. Mention s
   );
 }
 
-async function checkStepTherapy(bundle: ClaimBundle): Promise<CheckResult> {
+async function checkStepTherapy(bundle: ClaimBundle): Promise<LLMCheckResult> {
   return llmCheck(
     `You are a clinical reviewer assessing step therapy compliance for insurance prior authorization.
 
@@ -171,7 +187,7 @@ Write findings and recommendations in brief, provider-facing language. Mention s
   );
 }
 
-async function checkDocumentation(bundle: ClaimBundle): Promise<CheckResult> {
+async function checkDocumentation(bundle: ClaimBundle): Promise<LLMCheckResult> {
   return llmCheck(
     `You are a clinical reviewer assessing documentation completeness for insurance prior authorization.
 
@@ -199,6 +215,7 @@ Write findings and recommendations in brief, provider-facing language. Mention s
 export interface ValidationOutput {
   validation_result: ClinicalValidationResult;
   clinical_context: ClinicalContext;
+  token_usage: LLMCallUsage[];
 }
 
 function getDefaultValidationOutput(): ValidationOutput {
@@ -212,6 +229,7 @@ function getDefaultValidationOutput(): ValidationOutput {
       documentation: defaultCheck,
     }) as ClinicalValidationResult,
     clinical_context: defaultContext,
+    token_usage: [],
   };
 }
 
@@ -220,7 +238,7 @@ export async function runClinicalValidation(
 ): Promise<ValidationOutput> {
   try {
     // Run all 3 checks + fact extraction in parallel (4 LLM calls)
-    const [medicalNecessity, stepTherapy, documentation, clinicalContext] =
+    const [medicalNecessity, stepTherapy, documentation, factResult] =
       await Promise.all([
         checkMedicalNecessity(bundle),
         checkStepTherapy(bundle),
@@ -229,9 +247,9 @@ export async function runClinicalValidation(
       ]);
 
     const statuses = [
-      medicalNecessity.status,
-      stepTherapy.status,
-      documentation.status,
+      medicalNecessity.result.status,
+      stepTherapy.result.status,
+      documentation.result.status,
     ];
     let overallStatus: "pass" | "pass_with_findings" | "fail";
     if (statuses.includes("fail")) {
@@ -244,14 +262,23 @@ export async function runClinicalValidation(
 
     const validationResult = ClinicalValidationResultSchema.parse({
       overall_status: overallStatus,
-      medical_necessity: medicalNecessity,
-      step_therapy: stepTherapy,
-      documentation,
+      medical_necessity: medicalNecessity.result,
+      step_therapy: stepTherapy.result,
+      documentation: documentation.result,
     }) as ClinicalValidationResult;
+
+    // Collect token usage from all 4 LLM calls
+    const token_usage: LLMCallUsage[] = [
+      medicalNecessity.usage,
+      stepTherapy.usage,
+      documentation.usage,
+      factResult.usage,
+    ].filter((u): u is LLMCallUsage => u !== null);
 
     return {
       validation_result: validationResult,
-      clinical_context: clinicalContext,
+      clinical_context: factResult.context,
+      token_usage,
     };
   } catch (_err) {
     return getDefaultValidationOutput();

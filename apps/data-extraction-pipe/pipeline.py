@@ -56,7 +56,7 @@ def _get_resources():
     return _ner, _chroma_client
 
 
-def run_pipeline(raw_text: str) -> dict:
+def run_pipeline(raw_text: str) -> tuple[dict, list[dict] | None]:
     """
     Run the full clinical NLP → FHIR R4 pipeline on raw_text.
 
@@ -64,7 +64,7 @@ def run_pipeline(raw_text: str) -> dict:
         raw_text: Unredacted clinical note (may contain PHI).
 
     Returns:
-        FHIR R4 Bundle dict.
+        Tuple of (FHIR R4 Bundle dict, token_usage list or None).
     """
     import datetime
     print("start time:", datetime.datetime.now())
@@ -129,11 +129,12 @@ def run_pipeline(raw_text: str) -> dict:
 
     # ── Step 7: LLM with grounded candidates ──────────────────────────────────
     print("\n[7] Querying LLM (codes grounded by vector search)...")
-    openrouter_response = query_openrouter(
+    openrouter_response, llm_usage = query_openrouter(
         [{"word": ce.entity.text, "entity_group": ce.entity.entity_group} for ce in coded_entities],
         scrubbed_text,
         prompt_instruction=build_prompt_with_candidates(candidates_text),
     )
+    token_usage = [llm_usage] if llm_usage else []
     # Do not log LLM response: it may contain reattached PHI after downstream processing
     if openrouter_response:
         print("    LLM response: received (length omitted for PHI)")
@@ -158,13 +159,15 @@ def run_pipeline(raw_text: str) -> dict:
 
     print(f"    Resources in bundle: {len(fhir_bundle.get('entry', []))}")
     print("\nend time:", datetime.datetime.now())
-    return fhir_bundle
+    return fhir_bundle, token_usage
 
 
 # ── Direct script execution ───────────────────────────────────────────────────
 if __name__ == "__main__":
     from sample_text import text as raw_text
-    result = run_pipeline(raw_text)
+    result, usage = run_pipeline(raw_text)
     # Do not print full result: it contains reattached PHI
     entry_count = len(result.get("entry", []))
     print(f"\nPipeline complete. Bundle has {entry_count} entries.")
+    if usage:
+        print(f"Token usage: {usage}")

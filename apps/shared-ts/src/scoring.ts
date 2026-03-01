@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ClaimBundleSchema } from "./fhir.js";
 import { ClinicalValidationResultSchema } from "./validation.js";
 import { ClinicalContextSchema } from "./clinical-context.js";
+import { ServiceTokenUsageSchema } from "./token-usage.js";
 
 export const RuleResultSchema = z.object({
   rule_id: z.string(),
@@ -47,6 +48,7 @@ export const PipelineResultSchema = z.object({
   clinical_context: ClinicalContextSchema,
   payer_scores: z.record(PayerScoreBreakdownSchema),
   processing_time_seconds: z.number(),
+  token_usage: z.array(ServiceTokenUsageSchema).optional(),
 });
 
 export type RuleResult = z.infer<typeof RuleResultSchema>;

@@ -47,10 +47,10 @@ app.post("/score", async (req, res) => {
     const validation = (validationParsed.success ? validationParsed.data : ClinicalValidationResultSchema.parse({})) as ClinicalValidationResult;
     const context = (contextParsed.success ? contextParsed.data : ClinicalContextSchema.parse(DEFAULT_CLINICAL_CONTEXT_INPUT)) as ClinicalContext;
 
-    const payerScores = await scoreAllPayers(payers, context, bundle, validation);
+    const { payer_scores, token_usage } = await scoreAllPayers(payers, context, bundle, validation);
 
     // Return payer_scores so the gateway can build PipelineResult and map to ComplianceCheckResponse
-    res.json({ payer_scores: payerScores });
+    res.json({ payer_scores, token_usage });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("Scoring error:", message);

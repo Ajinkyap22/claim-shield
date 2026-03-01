@@ -7,18 +7,50 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"extract-file/models"
 )
 
-func ExtractImageText(file io.Reader) (string, error) {
+// parseUsageFromResult extracts token usage from the OpenRouter JSON response.
+func parseUsageFromResult(result map[string]interface{}, fallbackModel string) *models.TokenUsage {
+	usageRaw, ok := result["usage"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	model := fallbackModel
+	if m, ok := result["model"].(string); ok && m != "" {
+		model = m
+	}
+	return &models.TokenUsage{
+		Model:            model,
+		PromptTokens:     int(math.Round(toFloat64(usageRaw["prompt_tokens"]))),
+		CompletionTokens: int(math.Round(toFloat64(usageRaw["completion_tokens"]))),
+		TotalTokens:      int(math.Round(toFloat64(usageRaw["total_tokens"]))),
+	}
+}
+
+func toFloat64(v interface{}) float64 {
+	switch n := v.(type) {
+	case float64:
+		return n
+	case int:
+		return float64(n)
+	default:
+		return 0
+	}
+}
+
+func ExtractImageText(file io.Reader) (string, *models.TokenUsage, error) {
 
 	imgBytes, err := io.ReadAll(file)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	base64Image := base64.StdEncoding.EncodeToString(imgBytes)
@@ -44,24 +76,24 @@ func ExtractImageText(file io.Reader) (string, error) {
 		},
 	}
 
-	return callOpenRouterChat(payload)
+	return callOpenRouterChat(payload, "openai/gpt-4o-mini")
 }
 
-func TranscribeAudio(file io.Reader, fileName string) (string, error) {
+func TranscribeAudio(file io.Reader, fileName string) (string, *models.TokenUsage, error) {
 
 	audioBytes, err := io.ReadAll(file)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	return transcribeViaChatCompletions(audioBytes, fileName)
 }
 
-func callOpenRouterChat(payload map[string]interface{}) (string, error) {
+func callOpenRouterChat(payload map[string]interface{}, fallbackModel string) (string, *models.TokenUsage, error) {
 
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	req, err := http.NewRequest(
@@ -70,7 +102,7 @@ func callOpenRouterChat(payload map[string]interface{}) (string, error) {
 		bytes.NewBuffer(jsonData),
 	)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	req.Header.Set("Authorization", "Bearer "+os.Getenv("OPENROUTER_API_KEY"))
@@ -82,29 +114,31 @@ func callOpenRouterChat(payload map[string]interface{}) (string, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", errors.New("openrouter API failed")
+		return "", nil, errors.New("openrouter API failed")
 	}
 
 	var result map[string]interface{}
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
+
+	usage := parseUsageFromResult(result, fallbackModel)
 
 	choices, ok := result["choices"].([]interface{})
 	if !ok || len(choices) == 0 {
-		return "", errors.New("invalid openrouter response")
+		return "", usage, errors.New("invalid openrouter response")
 	}
 
 	message := choices[0].(map[string]interface{})["message"].(map[string]interface{})
 	content := message["content"].(string)
 
-	return content, nil
+	return content, usage, nil
 }
 
 func firstNonEmptyString(values ...string) string {
@@ -183,11 +217,11 @@ func normalizeAudioFormat(ext string) string {
 	}
 }
 
-func transcribeViaChatCompletions(audioBytes []byte, fileName string) (string, error) {
+func transcribeViaChatCompletions(audioBytes []byte, fileName string) (string, *models.TokenUsage, error) {
 
 	openRouterKey := os.Getenv("OPENROUTER_API_KEY")
 	if openRouterKey == "" {
-		return "", errors.New("OPENROUTER_API_KEY not set")
+		return "", nil, errors.New("OPENROUTER_API_KEY not set")
 	}
 
 	audioFormat := normalizeAudioFormat(filepath.Ext(fileName))
@@ -217,7 +251,7 @@ func transcribeViaChatCompletions(audioBytes []byte, fileName string) (string, e
 
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	req, err := http.NewRequest(
@@ -226,7 +260,7 @@ func transcribeViaChatCompletions(audioBytes []byte, fileName string) (string, e
 		bytes.NewBuffer(jsonData),
 	)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	req.Header.Set("Authorization", "Bearer "+openRouterKey)
@@ -236,38 +270,41 @@ func transcribeViaChatCompletions(audioBytes []byte, fileName string) (string, e
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("openrouter error (%d): %s", resp.StatusCode, string(body))
+		return "", nil, fmt.Errorf("openrouter error (%d): %s", resp.StatusCode, string(body))
 	}
 
-	return parseTranscriptionBody(body)
+	text, usage, err := parseTranscriptionBody(body)
+	return text, usage, err
 }
 
-func parseTranscriptionBody(body []byte) (string, error) {
+func parseTranscriptionBody(body []byte) (string, *models.TokenUsage, error) {
 	if text := strings.TrimSpace(string(body)); text != "" && !json.Valid(body) {
-		return text, nil
+		return text, nil, nil
 	}
 
 	var result map[string]interface{}
 	if err := json.Unmarshal(body, &result); err != nil {
-		return "", err
+		return "", nil, err
 	}
+
+	usage := parseUsageFromResult(result, "openai/gpt-4o-audio-preview")
 
 	if text := firstNonEmptyString(
 		getMapString(result, "text"),
 		getMapString(result, "transcript"),
 		getMapString(result, "output_text"),
 	); text != "" {
-		return text, nil
+		return text, usage, nil
 	}
 
 	if data, ok := result["data"].(map[string]interface{}); ok {
@@ -276,13 +313,13 @@ func parseTranscriptionBody(body []byte) (string, error) {
 			getMapString(data, "transcript"),
 			getMapString(data, "output_text"),
 		); text != "" {
-			return text, nil
+			return text, usage, nil
 		}
 	}
 
 	if text := extractTextFromChatShape(result); text != "" {
-		return text, nil
+		return text, usage, nil
 	}
 
-	return "", errors.New("transcription response did not contain text")
+	return "", usage, errors.New("transcription response did not contain text")
 }

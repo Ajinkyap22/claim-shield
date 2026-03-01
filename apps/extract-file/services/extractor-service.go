@@ -11,26 +11,30 @@ import (
 	"path/filepath"
 	"strings"
 
+	"extract-file/models"
+
 	"github.com/ledongthuc/pdf"
 )
 
-func ExtractFileText(file io.Reader, filename string) (string, error) {
+func ExtractFileText(file io.Reader, filename string) (string, *models.TokenUsage, error) {
 
 	ext := strings.ToLower(filepath.Ext(filename))
 
 	switch ext {
 
 	case ".pdf":
-		return extractPDF(file)
+		text, err := extractPDF(file)
+		return text, nil, err
 
 	case ".docx":
-		return extractDOCX(file)
+		text, err := extractDOCX(file)
+		return text, nil, err
 
 	case ".png", ".jpg", ".jpeg":
 		return ExtractImageText(file)
 
 	default:
-		return "", errors.New("unsupported file type")
+		return "", nil, errors.New("unsupported file type")
 	}
 }
 

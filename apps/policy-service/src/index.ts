@@ -94,7 +94,7 @@ app.post("/policies/ingest", upload.single("file"), async (req, res) => {
       return;
     }
 
-    const criteria = await extractCriteriaFromChunks(chunks, metadata, policyId);
+    const { criteria, token_usage } = await extractCriteriaFromChunks(chunks, metadata, policyId);
 
     await upsertCriteria(criteria);
 
@@ -114,6 +114,7 @@ app.post("/policies/ingest", upload.single("file"), async (req, res) => {
       criteria_count: criteria.length,
       chunks_processed: chunks.length,
       criteria,
+      token_usage,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);

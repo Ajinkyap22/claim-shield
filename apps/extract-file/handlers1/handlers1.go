@@ -23,6 +23,8 @@ func HandleExtract(w http.ResponseWriter, r *http.Request) {
 		DocumentationFiles: []models.ExtractedFile{},
 	}
 
+	var allUsage []models.TokenUsage
+
 	// ================= AUDIO FILES =================
 	audioFiles := r.MultipartForm.File["audioFiles"]
 	for _, fileHeader := range audioFiles {
@@ -36,7 +38,7 @@ func HandleExtract(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		text, err := services.TranscribeAudio(file, fileHeader.Filename)
+		text, usage, err := services.TranscribeAudio(file, fileHeader.Filename)
 		file.Close()
 
 		extracted := models.ExtractedFile{
@@ -46,6 +48,9 @@ func HandleExtract(w http.ResponseWriter, r *http.Request) {
 
 		if err != nil {
 			extracted.Error = err.Error()
+		}
+		if usage != nil {
+			allUsage = append(allUsage, *usage)
 		}
 
 		response.AudioFiles = append(response.AudioFiles, extracted)
@@ -64,7 +69,7 @@ func HandleExtract(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		text, err := services.ExtractFileText(file, fileHeader.Filename)
+		text, usage, err := services.ExtractFileText(file, fileHeader.Filename)
 		file.Close()
 
 		extracted := models.ExtractedFile{
@@ -74,6 +79,9 @@ func HandleExtract(w http.ResponseWriter, r *http.Request) {
 
 		if err != nil {
 			extracted.Error = err.Error()
+		}
+		if usage != nil {
+			allUsage = append(allUsage, *usage)
 		}
 
 		response.PolicyFiles = append(response.PolicyFiles, extracted)
@@ -92,7 +100,7 @@ func HandleExtract(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		text, err := services.ExtractFileText(file, fileHeader.Filename)
+		text, usage, err := services.ExtractFileText(file, fileHeader.Filename)
 		file.Close()
 
 		extracted := models.ExtractedFile{
@@ -103,9 +111,14 @@ func HandleExtract(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			extracted.Error = err.Error()
 		}
+		if usage != nil {
+			allUsage = append(allUsage, *usage)
+		}
 
 		response.DocumentationFiles = append(response.DocumentationFiles, extracted)
 	}
+
+	response.TokenUsage = allUsage
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)

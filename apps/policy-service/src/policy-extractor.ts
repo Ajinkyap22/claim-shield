@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { v4 as uuidv4 } from "uuid";
-import type { PolicyCriterion, IngestRequestMetadata } from "@compliance-shield/shared";
+import type { PolicyCriterion, IngestRequestMetadata, LLMCallUsage } from "@compliance-shield/shared";
 import { PolicyCriterionSchema } from "@compliance-shield/shared";
 import { z } from "zod";
 import { config } from "./config.js";
@@ -86,11 +86,16 @@ function isBoilerplate(chunk: TextChunk): boolean {
   return BOILERPLATE_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
+export interface PolicyExtractionResult {
+  criteria: PolicyCriterion[];
+  token_usage: LLMCallUsage[];
+}
+
 export async function extractCriteriaFromChunks(
   chunks: TextChunk[],
   metadata: IngestRequestMetadata,
   policyId: string
-): Promise<PolicyCriterion[]> {
+): Promise<PolicyExtractionResult> {
   // Pre-filter boilerplate chunks
   const clinicalChunks = chunks.filter((c) => !isBoilerplate(c));
 
@@ -102,6 +107,7 @@ export async function extractCriteriaFromChunks(
 
   // Process batches with limited concurrency
   const allCriteria: PolicyCriterion[] = [];
+  const allUsage: LLMCallUsage[] = [];
   const maxConcurrent = config.maxConcurrentBatches;
   for (let i = 0; i < batches.length; i += maxConcurrent) {
     const concurrentBatches = batches.slice(i, i + maxConcurrent);
@@ -110,19 +116,25 @@ export async function extractCriteriaFromChunks(
         extractFromBatch(batch, metadata, policyId)
       )
     );
-    for (const criteria of results) {
+    for (const { criteria, usage } of results) {
       allCriteria.push(...criteria);
+      if (usage) allUsage.push(usage);
     }
   }
 
-  return allCriteria;
+  return { criteria: allCriteria, token_usage: allUsage };
+}
+
+interface BatchResult {
+  criteria: PolicyCriterion[];
+  usage: LLMCallUsage | null;
 }
 
 async function extractFromBatch(
   chunks: TextChunk[],
   metadata: IngestRequestMetadata,
   policyId: string
-): Promise<PolicyCriterion[]> {
+): Promise<BatchResult> {
   // Build a combined prompt with numbered sections
   const sectionsText = chunks
     .map(
@@ -143,6 +155,15 @@ async function extractFromBatch(
     ],
   });
 
+  const usage: LLMCallUsage | null = response.usage
+    ? {
+        model: response.model ?? config.openrouterModel,
+        prompt_tokens: response.usage.prompt_tokens,
+        completion_tokens: response.usage.completion_tokens,
+        total_tokens: response.usage.total_tokens,
+      }
+    : null;
+
   if (response.usage) {
     console.log(`[${timestamp()}] [policy-extractor] Usage — model: ${response.model}, prompt: ${response.usage.prompt_tokens}, completion: ${response.usage.completion_tokens}, total: ${response.usage.total_tokens}`);
   }
@@ -150,7 +171,7 @@ async function extractFromBatch(
   const raw = JSON.parse(stripCodeFences(response.choices[0].message.content!));
   const parsed = ExtractedCriteriaSchema.parse(raw);
 
-  return parsed.criteria.map((c) => {
+  const criteria = parsed.criteria.map((c) => {
     const sourceChunk = chunks[c.section_index] || chunks[0];
     const criterion: PolicyCriterion = {
       criterion_id: uuidv4(),
@@ -171,4 +192,6 @@ async function extractFromBatch(
     };
     return PolicyCriterionSchema.parse(criterion);
   });
+
+  return { criteria, usage };
 }

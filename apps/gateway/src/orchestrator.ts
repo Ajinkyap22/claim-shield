@@ -12,6 +12,8 @@ import type {
   ClinicalContext,
   PayerScoreBreakdown,
   PipelineResult,
+  LLMCallUsage,
+  ServiceTokenUsage,
 } from "@compliance-shield/shared";
 import { config } from "./config.js";
 import {
@@ -49,11 +51,13 @@ export interface ExtractedResponse {
   audioFiles: ExtractedFile[];
   policyFiles: ExtractedFile[];
   documentationFiles: ExtractedFile[];
+  token_usage?: LLMCallUsage[];
 }
 
 interface ValidationOutput {
   validation_result: ClinicalValidationResult;
   clinical_context: ClinicalContext;
+  token_usage?: LLMCallUsage[];
 }
 
 export async function runPipeline(input: PipelineInput): Promise<void> {
@@ -70,6 +74,9 @@ export async function runPipeline(input: PipelineInput): Promise<void> {
   );
 
   try {
+    // Token usage accumulator — collect from all services
+    const usageByService: Record<string, LLMCallUsage[]> = {};
+
     // Stage 1: Extraction via extract-file service
     advanceStage(
       pipelineId,
@@ -77,6 +84,9 @@ export async function runPipeline(input: PipelineInput): Promise<void> {
       "Extracting clinical data...",
     );
     const extracted = await callExtractFile(input);
+    if (extracted.token_usage?.length) {
+      usageByService["extract-file"] = extracted.token_usage;
+    }
     const rawText = mergeExtractedResponse(extracted);
     completeStage(
       pipelineId,
@@ -102,14 +112,23 @@ export async function runPipeline(input: PipelineInput): Promise<void> {
       "Mapping to ICD-10 / CPT codes...",
     );
 
-    let policyIngestResults: Awaited<ReturnType<typeof callPolicyIngest>>;
+    let policyIngestResults: PolicyIngestResult[];
     let bundle: ClaimBundle;
+    let mappingUsage: LLMCallUsage[] = [];
 
     if (hasPolicyFiles) {
-      [policyIngestResults, bundle] = await Promise.all([
+      let processResult: ProcessResult;
+      let ingestResults: PolicyIngestResultWithUsage;
+      [ingestResults, processResult] = await Promise.all([
         callPolicyIngest(extracted.policyFiles ?? []),
         callProcess(rawText),
       ]);
+      policyIngestResults = ingestResults.results;
+      if (ingestResults.token_usage.length) {
+        usageByService["policy-ingest"] = ingestResults.token_usage;
+      }
+      bundle = processResult.bundle;
+      mappingUsage = processResult.token_usage;
       if (policyIngestResults.length === 0) {
         failPipeline(
           pipelineId,
@@ -119,7 +138,12 @@ export async function runPipeline(input: PipelineInput): Promise<void> {
       }
     } else {
       policyIngestResults = [];
-      bundle = await callProcess(rawText);
+      const processResult = await callProcess(rawText);
+      bundle = processResult.bundle;
+      mappingUsage = processResult.token_usage;
+    }
+    if (mappingUsage.length) {
+      usageByService["mapping"] = mappingUsage;
     }
 
     completeStage(
@@ -155,8 +179,11 @@ export async function runPipeline(input: PipelineInput): Promise<void> {
       PipelineStage.VALIDATING,
       "Validating clinical documentation...",
     );
-    const { validation_result, clinical_context } =
+    const { validation_result, clinical_context, token_usage: validationUsage } =
       await callValidation(bundle);
+    if (validationUsage?.length) {
+      usageByService["validation"] = validationUsage;
+    }
     completeStage(
       pipelineId,
       PipelineStage.VALIDATING,
@@ -174,12 +201,15 @@ export async function runPipeline(input: PipelineInput): Promise<void> {
       PipelineStage.SCORING,
       "Scoring against payer policies...",
     );
-    const payerScores = await callScoring(
+    const { scores: payerScores, token_usage: scoringUsage } = await callScoring(
       bundle,
       validation_result,
       clinical_context,
       payersForScoring,
     );
+    if (scoringUsage.length) {
+      usageByService["scoring"] = scoringUsage;
+    }
     completeStage(
       pipelineId,
       PipelineStage.SCORING,
@@ -187,7 +217,16 @@ export async function runPipeline(input: PipelineInput): Promise<void> {
       payerScores,
     );
 
+    // Build consolidated token_usage for PipelineResult
+    const token_usage: ServiceTokenUsage[] = Object.entries(usageByService).map(
+      ([service, calls]) => ({ service, calls }),
+    );
+
     const elapsed = (Date.now() - start) / 1000;
+
+    // Log consolidated token usage summary
+    logTokenUsageSummary(pipelineId, token_usage);
+
     console.log(
       `[orchestrator] Pipeline ${pipelineId} COMPLETED in ${elapsed.toFixed(2)}s — ` +
         `conditions=${bundle.conditions.length}, procedures=${bundle.procedures.length}, ` +
@@ -199,6 +238,7 @@ export async function runPipeline(input: PipelineInput): Promise<void> {
       clinical_context,
       payer_scores: payerScores,
       processing_time_seconds: Math.round(elapsed * 100) / 100,
+      token_usage: token_usage.length > 0 ? token_usage : undefined,
     };
     finishPipeline(pipelineId, result);
   } catch (err) {
@@ -230,6 +270,34 @@ function mergeExtractedResponse(res: ExtractedResponse): string {
   return parts.join("\n\n") || "";
 }
 
+/** Log a formatted token usage summary to console. */
+function logTokenUsageSummary(pipelineId: string, usage: ServiceTokenUsage[]): void {
+  if (usage.length === 0) return;
+
+  const lines: string[] = [`[orchestrator] Pipeline ${pipelineId} Token Usage:`];
+  let totalPrompt = 0;
+  let totalCompletion = 0;
+  let totalTokens = 0;
+  let totalCalls = 0;
+
+  for (const svc of usage) {
+    const p = svc.calls.reduce((s: number, c: LLMCallUsage) => s + c.prompt_tokens, 0);
+    const c = svc.calls.reduce((s: number, u: LLMCallUsage) => s + u.completion_tokens, 0);
+    const t = svc.calls.reduce((s: number, u: LLMCallUsage) => s + u.total_tokens, 0);
+    totalPrompt += p;
+    totalCompletion += c;
+    totalTokens += t;
+    totalCalls += svc.calls.length;
+    lines.push(
+      `  ${svc.service.padEnd(16)} prompt=${p}  completion=${c}  total=${t}  (${svc.calls.length} call${svc.calls.length === 1 ? "" : "s"})`,
+    );
+  }
+  lines.push(
+    `  ${"TOTAL".padEnd(16)} prompt=${totalPrompt}  completion=${totalCompletion}  total=${totalTokens}  (${totalCalls} call${totalCalls === 1 ? "" : "s"})`,
+  );
+  console.log(lines.join("\n"));
+}
+
 /** Response from policy-service POST /policies/ingest (one per policy document). */
 export interface PolicyIngestResult {
   policy_id: string;
@@ -241,22 +309,28 @@ export interface PolicyIngestResult {
   criteria?: unknown[];
 }
 
+interface PolicyIngestResultWithUsage {
+  results: PolicyIngestResult[];
+  token_usage: LLMCallUsage[];
+}
+
 /** Timeout for policy ingest (large PDFs can take several minutes due to many LLM calls). */
 const POLICY_INGEST_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
 /** Send extracted policy text to the policy service via multipart/form-data; returns one result per document ingested. */
 async function callPolicyIngest(
   policyFiles: ExtractedFile[],
-): Promise<PolicyIngestResult[]> {
+): Promise<PolicyIngestResultWithUsage> {
   if (policyFiles.length === 0) {
     console.log("[orchestrator] callPolicyIngest — no policy files, skipping");
-    return [];
+    return { results: [], token_usage: [] };
   }
 
   console.log(
     `[orchestrator] callPolicyIngest — processing ${policyFiles.length} file(s)`,
   );
   const results: PolicyIngestResult[] = [];
+  const allUsage: LLMCallUsage[] = [];
   for (let i = 0; i < policyFiles.length; i++) {
     const f = policyFiles[i];
     if (!f.text?.trim() || f.error) {
@@ -317,13 +391,15 @@ async function callPolicyIngest(
       const text = await resp.text();
       throw new Error(`Policy service ingest failed (${resp.status}): ${text}`);
     }
-    const data = (await resp.json()) as PolicyIngestResult;
-    results.push(data);
+    const data = (await resp.json()) as PolicyIngestResult & { token_usage?: LLMCallUsage[] };
+    const { token_usage: tu, ...ingestResult } = data;
+    results.push(ingestResult);
+    if (tu?.length) allUsage.push(...tu);
   }
   console.log(
     `[orchestrator] callPolicyIngest — done, ${results.length} result(s)`,
   );
-  return results;
+  return { results, token_usage: allUsage };
 }
 
 async function callExtractFile(
@@ -473,8 +549,13 @@ function fhirBundleToClaimBundle(fhir: {
   });
 }
 
+interface ProcessResult {
+  bundle: ClaimBundle;
+  token_usage: LLMCallUsage[];
+}
+
 /** Call mapping service /process; returns ClaimBundle (converted from FHIR bundle). */
-async function callProcess(rawText: string): Promise<ClaimBundle> {
+async function callProcess(rawText: string): Promise<ProcessResult> {
   const url = `${config.mappingServiceUrl}/process`;
   console.log(
     `[orchestrator] callProcess → POST ${url} (textLen=${rawText.length})`,
@@ -502,11 +583,15 @@ async function callProcess(rawText: string): Promise<ClaimBundle> {
   if (!resp.ok) throw new Error(`Mapping service error: ${resp.status}`);
   const data = (await resp.json()) as {
     fhir_bundle?: { entry?: FhirBundleEntry[] };
+    token_usage?: LLMCallUsage[];
   };
   const fhir = data.fhir_bundle && typeof data.fhir_bundle === "object"
     ? { entry: data.fhir_bundle.entry ?? [] }
     : { entry: [] };
-  return fhirBundleToClaimBundle(fhir);
+  return {
+    bundle: fhirBundleToClaimBundle(fhir),
+    token_usage: data.token_usage ?? [],
+  };
 }
 
 async function callValidation(bundle: ClaimBundle): Promise<ValidationOutput> {
@@ -562,7 +647,13 @@ async function callValidation(bundle: ClaimBundle): Promise<ValidationOutput> {
     clinical_context: ccParsed.success
       ? ccParsed.data
       : ClinicalContextSchema.parse(DEFAULT_CLINICAL_CONTEXT_INPUT),
+    token_usage: (data.token_usage as LLMCallUsage[] | undefined) ?? [],
   };
+}
+
+interface ScoringCallResult {
+  scores: Record<string, PayerScoreBreakdown>;
+  token_usage: LLMCallUsage[];
 }
 
 /** Call scoring service for a given set of payers (used by main pipeline and by payer-comparison endpoint). */
@@ -571,10 +662,10 @@ export async function callScoring(
   validation: ClinicalValidationResult,
   clinicalContext: ClinicalContext,
   payers: string[],
-): Promise<Record<string, PayerScoreBreakdown>> {
+): Promise<ScoringCallResult> {
   if (payers.length === 0) {
     console.log("[orchestrator] callScoring — no payers, skipping");
-    return {};
+    return { scores: {}, token_usage: [] };
   }
   const url = `${config.scoringServiceUrl}/score`;
   console.log(
@@ -608,10 +699,11 @@ export async function callScoring(
   if (!resp.ok) throw new Error(`Scoring service error: ${resp.status}`);
   const data = (await resp.json()) as {
     payer_scores: Record<string, unknown>;
+    token_usage?: LLMCallUsage[];
   };
   const scores: Record<string, PayerScoreBreakdown> = {};
   for (const [key, val] of Object.entries(data.payer_scores ?? {})) {
     scores[key] = PayerScoreBreakdownSchema.parse(val);
   }
-  return scores;
+  return { scores, token_usage: data.token_usage ?? [] };
 }

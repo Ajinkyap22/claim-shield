@@ -3,10 +3,16 @@ import type {
   ClinicalContext,
   ClinicalValidationResult,
   PayerScoreBreakdown,
+  LLMCallUsage,
 } from "@compliance-shield/shared";
 import { PayerScoreBreakdownSchema } from "@compliance-shield/shared";
 import { searchPolicyCriteria } from "./policy-client.js";
 import { completeChat } from "./openrouter-client.js";
+
+export interface ScoringResult {
+  payer_scores: Record<string, PayerScoreBreakdown>;
+  token_usage: LLMCallUsage[];
+}
 
 const SYSTEM_PROMPT = `You are a healthcare insurance policy analyst. Your job is to evaluate whether a medical claim meets the payer's policy criteria and estimate the denial probability.
 
@@ -84,12 +90,17 @@ function buildQueryText(context: ClinicalContext, bundle: ClaimBundle): string {
  * 3. Send criteria + clinical facts to the LLM via OpenRouter
  * 4. Parse structured output into PayerScoreBreakdown
  */
+interface PayerScoreResult {
+  score: PayerScoreBreakdown;
+  usage: LLMCallUsage | null;
+}
+
 export async function scoreForPayer(
   payerId: string,
   context: ClinicalContext,
   bundle: ClaimBundle,
   validation: ClinicalValidationResult
-): Promise<PayerScoreBreakdown> {
+): Promise<PayerScoreResult> {
   const queryText = buildQueryText(context, bundle);
 
   const criteria = await searchPolicyCriteria(
@@ -103,15 +114,18 @@ export async function scoreForPayer(
 
   if (criteria.length === 0) {
     return {
-      payer_id: payerId,
-      payer_name: payerName,
-      denial_probability: 0.5,
-      risk_level: "medium",
-      rules_evaluated: [],
-      recommendations: [
-        `No specific policy criteria found for ${payerName}. Upload the payer's coverage policy to get accurate scoring.`,
-      ],
-      summary: `No policy criteria available for ${payerName}. Unable to provide specific denial assessment.`,
+      score: {
+        payer_id: payerId,
+        payer_name: payerName,
+        denial_probability: 0.5,
+        risk_level: "medium",
+        rules_evaluated: [],
+        recommendations: [
+          `No specific policy criteria found for ${payerName}. Upload the payer's coverage policy to get accurate scoring.`,
+        ],
+        summary: `No policy criteria available for ${payerName}. Unable to provide specific denial assessment.`,
+      },
+      usage: null,
     };
   }
 
@@ -144,7 +158,7 @@ export async function scoreForPayer(
     2
   );
 
-  const rawResponse = await completeChat({
+  const { content: rawResponse, usage } = await completeChat({
     systemPrompt: SYSTEM_PROMPT,
     userMessage,
     temperature: 0,
@@ -193,7 +207,7 @@ export async function scoreForPayer(
     }
   }
 
-  return PayerScoreBreakdownSchema.parse(parsed);
+  return { score: PayerScoreBreakdownSchema.parse(parsed), usage };
 }
 
 /**
@@ -204,13 +218,19 @@ export async function scoreAllPayers(
   context: ClinicalContext,
   bundle: ClaimBundle,
   validation: ClinicalValidationResult
-): Promise<Record<string, PayerScoreBreakdown>> {
-  const entries = await Promise.all(
+): Promise<ScoringResult> {
+  const results = await Promise.all(
     payers.map(async (payerId) => {
-      const score = await scoreForPayer(payerId, context, bundle, validation);
-      return [payerId, score] as const;
+      return scoreForPayer(payerId, context, bundle, validation);
     })
   );
 
-  return Object.fromEntries(entries);
+  const payer_scores: Record<string, PayerScoreBreakdown> = {};
+  const token_usage: LLMCallUsage[] = [];
+  for (const { score, usage } of results) {
+    payer_scores[score.payer_id] = score;
+    if (usage) token_usage.push(usage);
+  }
+
+  return { payer_scores, token_usage };
 }

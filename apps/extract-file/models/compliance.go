@@ -11,6 +11,13 @@
 
 package models
 
+type TokenUsage struct {
+	Model            string `json:"model"`
+	PromptTokens     int    `json:"prompt_tokens"`
+	CompletionTokens int    `json:"completion_tokens"`
+	TotalTokens      int    `json:"total_tokens"`
+}
+
 type ExtractedFile struct {
 	FileName string `json:"fileName"`
 	Text     string `json:"text"`
@@ -22,4 +29,5 @@ type ExtractedResponse struct {
 	AudioFiles         []ExtractedFile `json:"audioFiles"`
 	PolicyFiles        []ExtractedFile `json:"policyFiles"`
 	DocumentationFiles []ExtractedFile `json:"documentationFiles"`
+	TokenUsage         []TokenUsage    `json:"token_usage,omitempty"`
 }

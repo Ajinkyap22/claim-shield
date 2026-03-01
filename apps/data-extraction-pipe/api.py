@@ -22,6 +22,7 @@ class ProcessRequest(BaseModel):
 
 class ProcessResponse(BaseModel):
     fhir_bundle: dict
+    token_usage: list[dict] | None = None
 
 
 @asynccontextmanager
@@ -59,7 +60,7 @@ def process(req: ProcessRequest):
     if not req.text or not req.text.strip():
         raise HTTPException(status_code=422, detail="text must not be empty")
     try:
-        fhir_bundle = run_pipeline(req.text)
-        return ProcessResponse(fhir_bundle=fhir_bundle)
+        fhir_bundle, token_usage = run_pipeline(req.text)
+        return ProcessResponse(fhir_bundle=fhir_bundle, token_usage=token_usage or None)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

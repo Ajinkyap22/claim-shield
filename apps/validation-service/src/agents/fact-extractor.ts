@@ -6,7 +6,7 @@
  */
 
 import OpenAI from "openai";
-import type { ClaimBundle, ClinicalContext } from "@compliance-shield/shared";
+import type { ClaimBundle, ClinicalContext, LLMCallUsage } from "@compliance-shield/shared";
 import {
   ClinicalContextSchema,
   DEFAULT_CLINICAL_CONTEXT_INPUT,
@@ -86,9 +86,14 @@ Rules:
 Be precise and conservative. Only mark something as present if the documentation clearly states it.
 Return ONLY raw JSON.`;
 
+export interface FactExtractionResult {
+  context: ClinicalContext;
+  usage: LLMCallUsage | null;
+}
+
 export async function extractClinicalContext(
   bundle: ClaimBundle
-): Promise<ClinicalContext> {
+): Promise<FactExtractionResult> {
   const summary = bundleSummary(bundle);
 
   const response = await openai.chat.completions.create({
@@ -103,15 +108,24 @@ export async function extractClinicalContext(
     ],
   });
 
+  const usage: LLMCallUsage | null = response.usage
+    ? {
+        model: response.model ?? config.openrouterModel,
+        prompt_tokens: response.usage.prompt_tokens,
+        completion_tokens: response.usage.completion_tokens,
+        total_tokens: response.usage.total_tokens,
+      }
+    : null;
+
   let raw: unknown;
   try {
     raw = JSON.parse(stripCodeFences(response.choices[0].message.content!));
   } catch {
-    return getDefaultClinicalContext();
+    return { context: getDefaultClinicalContext(), usage };
   }
 
   if (!raw || typeof raw !== "object") {
-    return getDefaultClinicalContext();
+    return { context: getDefaultClinicalContext(), usage };
   }
 
   const rawObj = raw as Record<string, unknown>;
@@ -138,9 +152,9 @@ export async function extractClinicalContext(
   }
 
   try {
-    return ClinicalContextSchema.parse(toParse);
+    return { context: ClinicalContextSchema.parse(toParse), usage };
   } catch {
-    return getDefaultClinicalContext();
+    return { context: getDefaultClinicalContext(), usage };
   }
 }
 

@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import type { LLMCallUsage } from "@compliance-shield/shared";
 import { config } from "./config.js";
 
 let client: OpenAI | null = null;
@@ -24,10 +25,15 @@ export interface LLMCompletionOptions {
   temperature?: number;
 }
 
+export interface LLMCompletionResult {
+  content: string;
+  usage: LLMCallUsage | null;
+}
+
 /**
  * Calls an LLM via OpenRouter using the OpenAI-compatible API.
  */
-export async function completeChat(opts: LLMCompletionOptions): Promise<string> {
+export async function completeChat(opts: LLMCompletionOptions): Promise<LLMCompletionResult> {
   const openai = getClient();
 
   const response = await openai.chat.completions.create({
@@ -44,7 +50,17 @@ export async function completeChat(opts: LLMCompletionOptions): Promise<string> 
   if (!content) {
     throw new Error("Empty response from OpenRouter LLM");
   }
-  return stripCodeFences(content);
+
+  const usage: LLMCallUsage | null = response.usage
+    ? {
+        model: response.model ?? config.openrouterModel,
+        prompt_tokens: response.usage.prompt_tokens,
+        completion_tokens: response.usage.completion_tokens,
+        total_tokens: response.usage.total_tokens,
+      }
+    : null;
+
+  return { content: stripCodeFences(content), usage };
 }
 
 function stripCodeFences(text: string): string {
