@@ -14,7 +14,7 @@ services:
       - policy-service
     environment:
       EXTRACT_FILE_SERVICE_URL: http://extract-file:8080
-      MAPPING_SERVICE_URL: http://mapping-service:8002
+      MAPPING_SERVICE_URL: http://mapping-service:8000
       VALIDATION_SERVICE_URL: http://validation-service:8003
       SCORING_SERVICE_URL: http://scoring-service:8004
       POLICY_SERVICE_URL: http://policy-service:8005
@@ -81,6 +81,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_API_URL: ""
+      INTERNAL_API_URL: http://gateway:8000
     depends_on:
       - gateway
