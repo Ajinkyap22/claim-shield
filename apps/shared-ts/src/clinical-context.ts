@@ -3,13 +3,13 @@ import { z } from "zod";
 // -- Sub-fact schemas --
 
 export const SLRResultSchema = z.object({
-  positive: z.boolean(),
+  positive: z.boolean().nullable().default(false),
   side: z.enum(["left", "right", "bilateral"]).nullable().default(null),
   angle_degrees: z.number().nullable().default(null),
 });
 
 export const MotorExamResultSchema = z.object({
-  deficit_present: z.boolean(),
+  deficit_present: z.boolean().nullable().default(false),
   muscle_groups_tested: z.array(z.string()).default([]),
   weakest_grade: z.string().nullable().default(null),
   laterality: z
@@ -19,13 +19,13 @@ export const MotorExamResultSchema = z.object({
 });
 
 export const SensoryExamResultSchema = z.object({
-  deficit_present: z.boolean(),
+  deficit_present: z.boolean().nullable().default(false),
   dermatomal_mapping: z.boolean().default(false),
   affected_dermatomes: z.array(z.string()).default([]),
 });
 
 export const ReflexExamResultSchema = z.object({
-  abnormal: z.boolean(),
+  abnormal: z.boolean().nullable().default(false),
   reflexes_tested: z.array(z.string()).default([]),
   findings: z.array(z.string()).default([]),
 });

@@ -58,6 +58,15 @@ interface ValidationOutput {
 export async function runPipeline(input: PipelineInput): Promise<void> {
   const { pipelineId } = input;
   const start = Date.now();
+  // Debug: log pipeline start with safe metadata only (no PHI)
+  console.log(
+    `[orchestrator] Pipeline ${pipelineId} starting — ` +
+      `clinicalNote=${input.clinicalNote ? `${input.clinicalNote.length} chars` : "empty"}, ` +
+      `audioFiles=${input.audioFiles?.length ?? 0}, ` +
+      `policyFiles=${input.policyFiles?.length ?? 0}, ` +
+      `documentationFiles=${input.documentationFiles?.length ?? 0}, ` +
+      `payers=[${input.payers?.join(",") ?? ""}]`,
+  );
 
   try {
     // Stage 1: Extraction via extract-file service
@@ -178,6 +187,11 @@ export async function runPipeline(input: PipelineInput): Promise<void> {
     );
 
     const elapsed = (Date.now() - start) / 1000;
+    console.log(
+      `[orchestrator] Pipeline ${pipelineId} COMPLETED in ${elapsed.toFixed(2)}s — ` +
+        `conditions=${bundle.conditions.length}, procedures=${bundle.procedures.length}, ` +
+        `payerScores=${Object.keys(payerScores).length}`,
+    );
     const result: PipelineResult = {
       claim_bundle: bundle,
       validation_result,
@@ -188,6 +202,13 @@ export async function runPipeline(input: PipelineInput): Promise<void> {
     finishPipeline(pipelineId, result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    const elapsed = ((Date.now() - start) / 1000).toFixed(2);
+    console.error(
+      `[orchestrator] Pipeline ${pipelineId} FAILED after ${elapsed}s — ${message}`,
+    );
+    if (err instanceof Error && err.cause) {
+      console.error(`[orchestrator] Cause:`, err.cause);
+    }
     failPipeline(pipelineId, message);
   }
 }
@@ -226,12 +247,27 @@ const POLICY_INGEST_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 async function callPolicyIngest(
   policyFiles: ExtractedFile[],
 ): Promise<PolicyIngestResult[]> {
-  if (policyFiles.length === 0) return [];
+  if (policyFiles.length === 0) {
+    console.log("[orchestrator] callPolicyIngest — no policy files, skipping");
+    return [];
+  }
 
+  console.log(
+    `[orchestrator] callPolicyIngest — processing ${policyFiles.length} file(s)`,
+  );
   const results: PolicyIngestResult[] = [];
-  for (const f of policyFiles) {
-    if (!f.text?.trim() || f.error) continue;
+  for (let i = 0; i < policyFiles.length; i++) {
+    const f = policyFiles[i];
+    if (!f.text?.trim() || f.error) {
+      console.log(
+        `[orchestrator] callPolicyIngest — skipping file ${i + 1} (empty or errored)`,
+      );
+      continue;
+    }
     const url = `${config.policyServiceUrl}/policies/ingest`;
+    console.log(
+      `[orchestrator] callPolicyIngest → POST ${url} (file ${i + 1}/${policyFiles.length}, textLen=${f.text.trim().length})`,
+    );
     const form = new FormData();
     form.append("text", f.text.trim());
     form.append(
@@ -244,6 +280,7 @@ async function callPolicyIngest(
     );
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), POLICY_INGEST_TIMEOUT_MS);
+    const t0 = Date.now();
     let resp: Response;
     try {
       resp = await fetch(url, {
@@ -253,14 +290,28 @@ async function callPolicyIngest(
       });
     } catch (err) {
       clearTimeout(timeoutId);
+      const elapsed = Date.now() - t0;
       if (err instanceof Error && err.name === "AbortError") {
+        console.error(
+          `[orchestrator] callPolicyIngest TIMEOUT after ${elapsed}ms for file ${i + 1}`,
+        );
         throw new Error(
           "Policy ingest timed out (10 min). Large PDFs take many LLM calls; try a smaller document or try again.",
         );
       }
+      console.error(
+        `[orchestrator] callPolicyIngest FAILED after ${elapsed}ms for file ${i + 1} — ${err instanceof Error ? err.message : err}`,
+      );
+      if (err instanceof Error && err.cause) {
+        console.error(`[orchestrator] callPolicyIngest cause:`, err.cause);
+      }
       throw err;
     }
     clearTimeout(timeoutId);
+    const elapsed = Date.now() - t0;
+    console.log(
+      `[orchestrator] callPolicyIngest ← ${resp.status} (${elapsed}ms) for file ${i + 1}`,
+    );
     if (!resp.ok) {
       const text = await resp.text();
       throw new Error(`Policy service ingest failed (${resp.status}): ${text}`);
@@ -268,6 +319,9 @@ async function callPolicyIngest(
     const data = (await resp.json()) as PolicyIngestResult;
     results.push(data);
   }
+  console.log(
+    `[orchestrator] callPolicyIngest — done, ${results.length} result(s)`,
+  );
   return results;
 }
 
@@ -275,6 +329,7 @@ async function callExtractFile(
   input: PipelineInput,
 ): Promise<ExtractedResponse> {
   const url = `${config.extractFileServiceUrl}/api/extract`;
+  console.log(`[orchestrator] callExtractFile → POST ${url}`);
   const form = new FormData();
   form.append("clinicalNote", input.clinicalNote ?? "");
 
@@ -301,7 +356,24 @@ async function callExtractFile(
     );
   }
 
-  const resp = await fetch(url, { method: "POST", body: form });
+  const t0 = Date.now();
+  let resp: Response;
+  try {
+    resp = await fetch(url, { method: "POST", body: form });
+  } catch (err) {
+    const elapsed = Date.now() - t0;
+    console.error(
+      `[orchestrator] callExtractFile FAILED after ${elapsed}ms — ${err instanceof Error ? err.message : err}`,
+    );
+    if (err instanceof Error && err.cause) {
+      console.error(`[orchestrator] callExtractFile cause:`, err.cause);
+    }
+    throw err;
+  }
+  const elapsed = Date.now() - t0;
+  console.log(
+    `[orchestrator] callExtractFile ← ${resp.status} (${elapsed}ms)`,
+  );
   if (!resp.ok) throw new Error(`Extract-file service error: ${resp.status}`);
   return (await resp.json()) as ExtractedResponse;
 }
@@ -403,11 +475,29 @@ function fhirBundleToClaimBundle(fhir: {
 /** Call mapping service /process; returns ClaimBundle (converted from FHIR bundle). */
 async function callProcess(rawText: string): Promise<ClaimBundle> {
   const url = `${config.mappingServiceUrl}/process`;
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: rawText }),
-  });
+  console.log(
+    `[orchestrator] callProcess → POST ${url} (textLen=${rawText.length})`,
+  );
+  const t0 = Date.now();
+  let resp: Response;
+  try {
+    resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: rawText }),
+    });
+  } catch (err) {
+    const elapsed = Date.now() - t0;
+    console.error(
+      `[orchestrator] callProcess FAILED after ${elapsed}ms — ${err instanceof Error ? err.message : err}`,
+    );
+    if (err instanceof Error && err.cause) {
+      console.error(`[orchestrator] callProcess cause:`, err.cause);
+    }
+    throw err;
+  }
+  const elapsed = Date.now() - t0;
+  console.log(`[orchestrator] callProcess ← ${resp.status} (${elapsed}ms)`);
   if (!resp.ok) throw new Error(`Mapping service error: ${resp.status}`);
   const data = (await resp.json()) as {
     fhir_bundle?: { entry?: FhirBundleEntry[] };
@@ -420,11 +510,29 @@ async function callProcess(rawText: string): Promise<ClaimBundle> {
 
 async function callValidation(bundle: ClaimBundle): Promise<ValidationOutput> {
   const url = `${config.validationServiceUrl}/validate`;
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(bundle),
-  });
+  console.log(`[orchestrator] callValidation → POST ${url}`);
+  const t0 = Date.now();
+  let resp: Response;
+  try {
+    resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(bundle),
+    });
+  } catch (err) {
+    const elapsed = Date.now() - t0;
+    console.error(
+      `[orchestrator] callValidation FAILED after ${elapsed}ms — ${err instanceof Error ? err.message : err}`,
+    );
+    if (err instanceof Error && err.cause) {
+      console.error(`[orchestrator] callValidation cause:`, err.cause);
+    }
+    throw err;
+  }
+  const elapsed = Date.now() - t0;
+  console.log(
+    `[orchestrator] callValidation ← ${resp.status} (${elapsed}ms)`,
+  );
   if (!resp.ok) {
     const bodyText = await resp.text();
     let detail = bodyText;
@@ -457,18 +565,39 @@ export async function callScoring(
   clinicalContext: ClinicalContext,
   payers: string[],
 ): Promise<Record<string, PayerScoreBreakdown>> {
-  if (payers.length === 0) return {};
+  if (payers.length === 0) {
+    console.log("[orchestrator] callScoring — no payers, skipping");
+    return {};
+  }
   const url = `${config.scoringServiceUrl}/score`;
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      claim_bundle: bundle,
-      validation_result: validation,
-      clinical_context: clinicalContext,
-      payers,
-    }),
-  });
+  console.log(
+    `[orchestrator] callScoring → POST ${url} (payers=[${payers.join(",")}])`,
+  );
+  const t0 = Date.now();
+  let resp: Response;
+  try {
+    resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        claim_bundle: bundle,
+        validation_result: validation,
+        clinical_context: clinicalContext,
+        payers,
+      }),
+    });
+  } catch (err) {
+    const elapsed = Date.now() - t0;
+    console.error(
+      `[orchestrator] callScoring FAILED after ${elapsed}ms — ${err instanceof Error ? err.message : err}`,
+    );
+    if (err instanceof Error && err.cause) {
+      console.error(`[orchestrator] callScoring cause:`, err.cause);
+    }
+    throw err;
+  }
+  const elapsed = Date.now() - t0;
+  console.log(`[orchestrator] callScoring ← ${resp.status} (${elapsed}ms)`);
   if (!resp.ok) throw new Error(`Scoring service error: ${resp.status}`);
   const data = (await resp.json()) as {
     payer_scores: Record<string, unknown>;
