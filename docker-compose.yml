@@ -34,8 +34,8 @@ services:
     image: node:20-slim
     working_dir: /app/apps/validation-service
     command: sh -c "npm install --prefix /app/apps/shared-ts && npm run --prefix /app/apps/shared-ts build && npm install && npm run dev"
-    volumes:
-      - .:/app
+    # volumes:
+    #   - .:/app
     ports:
       - "8003:8003"
     env_file:
@@ -45,8 +45,8 @@ services:
     image: node:20-slim
     working_dir: /app/apps/scoring-service
     command: sh -c "npm install --prefix /app/apps/shared-ts && npm run --prefix /app/apps/shared-ts build && npm install && npm run dev"
-    volumes:
-      - .:/app
+    # volumes:
+    #   - .:/app
     ports:
       - "8004:8004"
     env_file:
@@ -60,8 +60,8 @@ services:
     image: node:20-slim
     working_dir: /app/apps/policy-service
     command: sh -c "npm install --prefix /app/apps/shared-ts && npm run --prefix /app/apps/shared-ts build && npm install && npm run dev"
-    volumes:
-      - .:/app
+    # volumes:
+    #   - .:/app
     ports:
       - "8005:8005"
     env_file: .env
@@ -79,7 +79,7 @@ services:
       context: ./apps/frontend
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "3010:3000"
     environment:
       NEXT_PUBLIC_API_URL: ""
       INTERNAL_API_URL: http://gateway:8000
