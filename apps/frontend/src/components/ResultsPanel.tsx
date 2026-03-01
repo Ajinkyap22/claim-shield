@@ -13,7 +13,6 @@ import { ClaimSummary } from "@/components/ClaimSummary";
 import { DualAgentView } from "@/components/DualAgentView";
 import { RecommendationsList } from "@/components/RecommendationsList";
 import { ValidationIssues } from "@/components/ValidationIssues";
-import { PayerComparisonBlock } from "@/components/PayerComparisonBlock";
 import type { ComplianceCheckResponse } from "@/types/compliance";
 import { MOCK_COMPLIANCE_RESPONSE } from "@/api/compliance";
 import { formatCitation } from "@/lib/formatCitation";
@@ -23,8 +22,6 @@ import { jsPDF } from "jspdf";
 interface ResultsPanelProps {
   /** When provided (from API), overrides mock data. When null, UI uses internal mocks. */
   result?: ComplianceCheckResponse | null;
-  /** When provided, "Compare with top payers" uses this jobId for the payer-comparison API. */
-  jobId?: string;
   onReset: () => void;
 }
 
@@ -44,7 +41,6 @@ const TOP_RECOMMENDATIONS_COPY = 5;
 
 export function ResultsPanel({
   result = null,
-  jobId,
   onReset,
 }: ResultsPanelProps) {
   const topRef = useRef<HTMLDivElement>(null);
@@ -244,11 +240,6 @@ export function ResultsPanel({
         </div>
       </motion.div>
 
-      {/* ── HOW CLAIM STANDS VS TOP US PAYERS (optional; separate request) ── */}
-      <motion.div {...fadeUp(0.12)}>
-        <PayerComparisonBlock jobId={jobId} />
-      </motion.div>
-
       {/* ── DUAL AGENT VIEW ── */}
       <motion.div {...fadeUp(0.18)}>
         <div className="flex items-center gap-3 mb-3">
@@ -277,7 +268,7 @@ export function ResultsPanel({
       <motion.div {...fadeUp(0.38)}>
         <div className="text-center py-4">
           <p className="text-[var(--body-text-muted)]" style={{ fontSize: "0.72rem" }}>
-            ComplianceShield can be embedded in your billing workflow or accessed via{" "}
+            ClaimShield can be embedded in your billing workflow or accessed via{" "}
             <span className="font-mono" style={{ color: "var(--teal-600)" }}>POST /api/v1/claim-check</span>.{" "}
             Results are advisory; always confirm with your billing compliance officer.
           </p>

@@ -151,9 +151,21 @@ app.post("/policies/search", async (req, res) => {
       parsed.top_k
     );
 
+    // Deduplicate by requirement + category so the same criterion is not returned
+    // multiple times (e.g. from overlapping chunks or prior ingest duplicates).
+    const dedupeKey = (c: { requirement?: string; category?: string }) =>
+      (c.requirement ?? "").trim().toLowerCase().replace(/\s+/g, " ") + "|" + (c.category ?? "general");
+    const seen = new Set<string>();
+    const criteria = results.filter((c) => {
+      const key = dedupeKey(c);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
     res.json({
-      criteria: results,
-      total_results: results.length,
+      criteria,
+      total_results: criteria.length,
     });
   } catch (err: unknown) {
     if (err instanceof z.ZodError) {

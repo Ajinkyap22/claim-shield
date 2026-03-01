@@ -115,7 +115,7 @@ export async function extractCriteriaFromChunks(
     }
   }
 
-  return allCriteria;
+  return deduplicateCriteria(allCriteria);
 }
 
 async function extractFromBatch(
@@ -171,4 +171,25 @@ async function extractFromBatch(
     };
     return PolicyCriterionSchema.parse(criterion);
   });
+}
+
+/** Normalize text for deduplication: lowercase, trim, collapse whitespace. */
+function normKey(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/**
+ * Deduplicate criteria by requirement + category so the same rule is not stored
+ * and returned multiple times (e.g. "Introduction (Part 1)" repeated across chunks).
+ */
+export function deduplicateCriteria(criteria: PolicyCriterion[]): PolicyCriterion[] {
+  const seen = new Set<string>();
+  const out: PolicyCriterion[] = [];
+  for (const c of criteria) {
+    const key = normKey(c.requirement) + "|" + (c.category ?? "general");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(c);
+  }
+  return out;
 }

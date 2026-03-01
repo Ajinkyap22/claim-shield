@@ -47,7 +47,7 @@ function getAppState(
   return "idle";
 }
 
-export default function ComplianceShieldApp() {
+export default function ClaimShieldApp() {
   const [pollStatus, setPollStatus] = useState<PollStatusResponse | null>(null);
   const mutation = useComplianceCheckMutation({ onStatus: setPollStatus });
   const { mutate, isPending, isSuccess, isError, data, error, reset } =
@@ -57,7 +57,6 @@ export default function ComplianceShieldApp() {
   const result: ComplianceCheckResponse | null = isSuccess && data
     ? data
     : null;
-  const jobId = isSuccess && data && "jobId" in data ? data.jobId : undefined;
 
   const handleSubmit = (payload: ComplianceCheckPayload) => {
     setPollStatus(null);
@@ -348,7 +347,6 @@ export default function ComplianceShieldApp() {
               </div>
               <ResultsPanel
                 result={result}
-                jobId={jobId}
                 onReset={handleReset}
               />
             </motion.section>
@@ -367,7 +365,7 @@ export default function ComplianceShieldApp() {
               className="font-display text-[var(--body-text)]"
               style={{ fontSize: "0.8rem", fontWeight: 600 }}
             >
-              Compliance<span className="text-teal-600">Shield</span>
+              Claim<span className="text-teal-600">Shield</span>
             </p>
             <p
               className="text-[var(--body-text-muted)] mt-0.5"

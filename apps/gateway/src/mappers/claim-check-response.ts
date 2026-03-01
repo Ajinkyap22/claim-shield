@@ -129,7 +129,8 @@ function buildClinicianFindings(
   vr: PipelineResult["validation_result"],
 ): ClinicianFinding[] {
   const findings: ClinicianFinding[] = [];
-  const isGap = (status: string) => status === "fail" || status === "pass_with_findings";
+  const isGap = (status: string | null | undefined): boolean =>
+    status === "fail" || status === "pass_with_findings";
 
   // Procedure / Region
   const procText =
@@ -161,7 +162,7 @@ function buildClinicianFindings(
   findings.push({
     category: "Conservative Treatment",
     text: ctText,
-    status: isGap(vr.step_therapy.status) ? "gap" : ctParts.length > 0 ? "documented" : "gap",
+    status: isGap(vr.step_therapy?.status) ? "gap" : ctParts.length > 0 ? "documented" : "gap",
   });
 
   // Neurological exam
@@ -196,15 +197,15 @@ function buildClinicianFindings(
   // Medical necessity (from validation)
   findings.push({
     category: "Medical Necessity",
-    text: sanitizeForDisplay(vr.medical_necessity.findings || "Medical necessity not assessed."),
-    status: isGap(vr.medical_necessity.status) ? "gap" : "documented",
+    text: sanitizeForDisplay(vr.medical_necessity?.findings ?? "Medical necessity not assessed."),
+    status: isGap(vr.medical_necessity?.status) ? "gap" : "documented",
   });
 
   // Step therapy (from validation)
   findings.push({
     category: "Step Therapy",
-    text: sanitizeForDisplay(vr.step_therapy.findings || "Step therapy requirements not assessed."),
-    status: isGap(vr.step_therapy.status) ? "gap" : "documented",
+    text: sanitizeForDisplay(vr.step_therapy?.findings ?? "Step therapy requirements not assessed."),
+    status: isGap(vr.step_therapy?.status) ? "gap" : "documented",
   });
 
   // Documentation (from validation + missing_elements)
@@ -215,23 +216,33 @@ function buildClinicianFindings(
       : "";
   findings.push({
     category: "Documentation",
-    text: sanitizeForDisplay((vr.documentation.findings || "Documentation not assessed.") + missingStr),
-    status: isGap(vr.documentation.status) || (dq.missing_elements?.length ?? 0) > 0 ? "gap" : "documented",
+    text: sanitizeForDisplay((vr.documentation?.findings ?? "Documentation not assessed.") + missingStr),
+    status: isGap(vr.documentation?.status) || (dq.missing_elements?.length ?? 0) > 0 ? "gap" : "documented",
   });
 
   return findings;
+}
+
+/** Normalize for deduplication: lowercase, trim, collapse whitespace. */
+function normForDedupe(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 function buildPayerPolicyPoints(
   rules: Array<{ rule_id: string; description: string; reasoning: string; evidence?: string[]; passed: boolean; section_reference?: string }>,
 ): PayerPolicyPoint[] {
   const points: PayerPolicyPoint[] = [];
+  const seen = new Set<string>();
   for (const rule of rules) {
     const citation = rule.section_reference ?? rule.rule_id;
+    const title = sanitizeForDisplay(rule.description);
+    const key = normForDedupe(citation) + "|" + normForDedupe(title);
+    if (seen.has(key)) continue;
+    seen.add(key);
     const rawText = rule.reasoning + (rule.evidence?.length ? ` ${rule.evidence.join(" ")}` : "");
     points.push({
       citation,
-      title: sanitizeForDisplay(rule.description),
+      title,
       text: sanitizeForDisplay(rawText),
       severity: rule.passed ? "warn" : "fail",
     });
@@ -245,6 +256,7 @@ function buildRecommendations(
 ): ClaimCheckRecommendation[] {
   const recs: ClaimCheckRecommendation[] = [];
   let id = 1;
+  const seenKeys = new Set<string>();
 
   const add = (
     title: string,
@@ -252,6 +264,9 @@ function buildRecommendations(
     citation: string,
     priority?: string
   ) => {
+    const key = normForDedupe(title) + "|" + normForDedupe(citation);
+    if (seenKeys.has(key)) return;
+    seenKeys.add(key);
     recs.push({
       id: id++,
       title: sanitizeForDisplay(title),
@@ -285,12 +300,21 @@ function buildRecommendations(
     }
     for (const rule of p.rules_evaluated ?? []) {
       if (!rule.passed && rule.reasoning) {
-        add(rule.description, rule.reasoning, rule.rule_id, "Advisory");
+        const citation = rule.section_reference ?? rule.rule_id;
+        add(rule.description, rule.reasoning, citation, "Advisory");
       }
     }
   }
 
   return recs;
+}
+
+const VALID_STATUS = ["pass", "pass_with_findings", "fail"] as const;
+type ValidStatus = (typeof VALID_STATUS)[number];
+
+function normalizeStatus(s: string | null | undefined): ValidStatus {
+  if (s === "fail" || s === "pass_with_findings" || s === "pass") return s;
+  return "pass";
 }
 
 function buildValidationIssues(
@@ -299,19 +323,20 @@ function buildValidationIssues(
   const issues: ClaimCheckValidationIssue[] = [];
   const add = (
     category: string,
-    findings: string,
-    status: "pass" | "pass_with_findings" | "fail"
+    findings: string | null | undefined,
+    status: string | null | undefined
   ) => {
+    const s = normalizeStatus(status);
     const type: "error" | "warn" | "info" =
-      status === "fail" ? "error" : status === "pass_with_findings" ? "warn" : "info";
-    const detail = findings?.trim() ? sanitizeForDisplay(findings) : "";
+      s === "fail" ? "error" : s === "pass_with_findings" ? "warn" : "info";
+    const detail = (findings ?? "")?.trim() ? sanitizeForDisplay(findings ?? "") : "";
     if (detail) {
       issues.push({ type, code: category, title: category, detail });
     }
   };
-  add("medical_necessity", vr.medical_necessity.findings, vr.medical_necessity.status);
-  add("step_therapy", vr.step_therapy.findings, vr.step_therapy.status);
-  add("documentation", vr.documentation.findings, vr.documentation.status);
+  add("medical_necessity", vr.medical_necessity?.findings, vr.medical_necessity?.status);
+  add("step_therapy", vr.step_therapy?.findings, vr.step_therapy?.status);
+  add("documentation", vr.documentation?.findings, vr.documentation?.status);
   return issues;
 }
 

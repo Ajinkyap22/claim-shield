@@ -1,5 +1,5 @@
-import ComplianceShieldApp from "@/app/ComplianceShieldApp";
+import ClaimShieldApp from "@/app/ClaimShieldApp";
 
 export default function Home() {
-  return <ComplianceShieldApp />;
+  return <ClaimShieldApp />;
 }

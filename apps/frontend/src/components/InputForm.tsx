@@ -168,7 +168,7 @@ interface InputFormProps {
 const SAMPLE_DATASETS = [
   {
     id: "spine-low-denial",
-    label: "Spine MRI — low denial risk (Aetna policy)",
+    label: "Spine MRI",
     content: `Patient: David K., DOB 06/12/1968
 Date of Service: 02/28/2026
 
@@ -194,33 +194,6 @@ Plan: Lumbar spine MRI without contrast (CPT 72148). Prior authorization request
 Attending: Dr. Lisa Wong, MD, Physical Medicine & Rehabilitation
 Facility: Spine Care Associates
 NPI: 1122334455`,
-  },
-  {
-    id: "spine-moderate-denial",
-    label: "Spine MRI — moderate denial risk (Aetna policy)",
-    content: `Patient: Sandra M., DOB 09/05/1974
-Date of Service: 02/26/2026
-
-Chief Complaint: Low back pain with leg symptoms; MRI lumbar spine requested.
-
-History: Approximately 5 weeks of low back pain with some radiation into the right leg. Patient reports trying ibuprofen and some home stretches. Physical therapy was started 3 weeks ago (2x/week). No prior injections or surgery.
-
-Physical Examination:
-- Lumbar range of motion reduced; tenderness in paraspinal region
-- Straight leg raise: Positive on the right at approximately 50°
-- Motor strength: Right lower extremity 5/5 throughout; no focal weakness documented
-- Sensory: Patient reports occasional tingling in right calf; formal dermatomal testing not fully documented
-- Reflexes: Not clearly documented
-
-Imaging: No prior lumbar imaging noted in chart.
-
-Assessment: Low back pain with radiculopathy (M54.51, M54.16). Requesting lumbar MRI (CPT 72148) for further evaluation.
-
-Plan: Order lumbar MRI without contrast. Will obtain prior auth as required.
-
-Attending: Dr. Robert Hayes, MD
-Facility: Metro Primary Care
-NPI: 5544332211`,
   },
   {
     id: "lumbar",
@@ -461,9 +434,7 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
   };
 
   const hasClaimInput =
-    note.trim().length > 0 ||
-    audioFiles.length > 0 ||
-    docImageFiles.length > 0;
+    note.trim().length > 0 || audioFiles.length > 0 || docImageFiles.length > 0;
   const hasPolicy = policyFiles.length > 0;
   const canSubmit = hasClaimInput && hasPolicy && !loading;
 
@@ -893,7 +864,7 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
           ) : (
             <>
               <ShieldCheck className="w-4 h-4" />
-              Run Compliance Check
+              Run Claim Check
             </>
           )}
         </button>

@@ -20,7 +20,7 @@ const outfit = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Compliance Shield - Pre-submit Claim Intelligence",
+  title: "Claim Shield - Pre-submit Claim Intelligence",
   description:
     "Catch denials before the claim leaves your system. Policy-cited recommendations, 0-100 denial risk score.",
 };
