@@ -43,14 +43,21 @@ router.post(
     const documentationFiles =
       (req.files as Record<string, Express.Multer.File[]>)?.documentation ?? [];
 
-    const hasFiles =
+    const hasClinicalInput =
+      clinicalNote.length > 0 ||
       audioFiles.length > 0 ||
-      policyFiles.length > 0 ||
       documentationFiles.length > 0;
-    if (!clinicalNote && !hasFiles) {
+    const hasPolicy = policyFiles.length > 0;
+    if (!hasClinicalInput) {
       res.status(422).json({
         detail:
-          "Provide clinicalNote or at least one file (audio, policy, or documentation).",
+          "Provide at least one of: clinical note text, audio, or documentation.",
+      });
+      return;
+    }
+    if (!hasPolicy) {
+      res.status(422).json({
+        detail: "Upload at least one policy PDF to run the check.",
       });
       return;
     }

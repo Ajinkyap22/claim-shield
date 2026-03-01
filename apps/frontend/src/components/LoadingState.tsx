@@ -79,33 +79,68 @@ export function LoadingState({
       transition={{ duration: 0.45, ease: easeSmooth }}
       className="flex flex-col items-center justify-center py-16 px-6"
     >
-      {/* Prominent spinner + shield */}
-      <div className="relative mb-8 flex items-center justify-center">
-        <div className="relative flex items-center justify-center">
+      {/* Prominent spinner + shield with pulsing rings */}
+      <div className="relative mb-8 flex items-center justify-center min-h-[180px]">
+        {/* Pulsing radar-style rings — seamless loop: fade in → expand → fade out → shrink back invisible → repeat */}
+        {[0, 1].map((i) => (
           <motion.div
-            initial={{ scale: 0.92, opacity: 0.8 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.5, ease: easeSmooth }}
+            key={i}
+            className="absolute rounded-full border-2 border-teal-400/80"
+            style={{
+              width: 96,
+              height: 96,
+              borderColor: "var(--teal-400)",
+            }}
+            initial={{ scale: 0.7, opacity: 0 }}
+            animate={{
+              scale: [0.7, 0.7, 1.5, 1.8, 0.7],
+              opacity: [0, 0.7, 0.35, 0, 0],
+            }}
+            transition={{
+              duration: 3.5,
+              repeat: Number.POSITIVE_INFINITY,
+              delay: i * 1.2,
+              ease: "easeOut",
+              times: [0, 0.15, 0.45, 0.75, 1],
+            }}
+            aria-hidden
+          />
+        ))}
+        <div className="relative flex items-center justify-center">
+          {/* Breathing glow on the card — explicit "still working" cue */}
+          <motion.div
             className="flex items-center justify-center rounded-2xl w-24 h-24 z-10"
+            initial={{ scale: 1, opacity: 1 }}
+            animate={{
+              scale: [1, 1.05, 1],
+              boxShadow: [
+                "var(--shadow-glow-teal), 0 8px 24px rgba(15, 39, 68, 0.15)",
+                "0 0 36px rgba(20, 184, 166, 0.4), 0 8px 24px rgba(15, 39, 68, 0.2)",
+                "var(--shadow-glow-teal), 0 8px 24px rgba(15, 39, 68, 0.15)",
+              ],
+            }}
+            transition={{
+              duration: 3.5,
+              repeat: Number.POSITIVE_INFINITY,
+              ease: "easeInOut",
+            }}
             style={{
               background:
                 "linear-gradient(135deg, var(--navy-900) 0%, var(--navy-700) 100%)",
-              boxShadow:
-                "var(--shadow-glow-teal), 0 8px 24px rgba(15, 39, 68, 0.15)",
             }}
           >
             <ShieldCheck className="w-11 h-11 text-teal-400" />
           </motion.div>
           {/* Large visible spinning ring around the icon */}
           <Loader2
-            className="absolute w-32 h-32 text-teal-500/70 animate-spin -z-[1]"
-            strokeWidth={2}
+            className="absolute w-32 h-32 text-teal-500/80 animate-spin -z-[1]"
+            strokeWidth={2.5}
             aria-hidden
           />
         </div>
       </div>
 
-      {/* "Analyzing your claim" label so it's obvious we're loading */}
+      {/* "Analyzing your claim" label */}
       <p
         className="text-[var(--body-text-muted)] text-center mb-1"
         style={{

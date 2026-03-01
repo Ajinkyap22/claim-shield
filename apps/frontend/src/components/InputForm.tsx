@@ -167,6 +167,62 @@ interface InputFormProps {
 
 const SAMPLE_DATASETS = [
   {
+    id: "spine-low-denial",
+    label: "Spine MRI — low denial risk (Aetna policy)",
+    content: `Patient: David K., DOB 06/12/1968
+Date of Service: 02/28/2026
+
+Chief Complaint: Chronic lumbar radiculopathy with left L5 distribution symptoms; request for lumbar MRI (CPT 72148).
+
+History: Eight weeks of persistent low back pain with radiation into the left leg, numbness in L5 dermatome. Symptoms unchanged after 6+ weeks of conservative treatment. No red flags: no bowel/bladder changes, no saddle anesthesia, no fever or weight loss.
+
+Conservative treatment (completed): Physical therapy 3x/week for 8 weeks (CPT 97110, 97140). NSAID trial (naproxen 500 mg BID) for 6 weeks. Muscle relaxant trial (cyclobenzaprine) 2 weeks. Activity modification and home exercise program documented. No improvement in pain or function.
+
+Physical Examination:
+- Lumbar: Flexion 50°, extension 10°, paraspinal tenderness L4–S1
+- Straight leg raise: Positive left at 40°, reproducing radicular symptoms
+- Motor: Left EHL 4/5, left tibialis anterior 4/5; remainder 5/5
+- Sensory: Decreased light touch L5 left; dermatomal mapping consistent
+- Reflexes: Left Achilles 1+, right 2+; patellar 2+ bilaterally
+
+Prior imaging: Lumbar X-ray 01/2026 — disc space narrowing L4–L5, L5–S1; no fracture.
+
+Assessment: Lumbar radiculopathy, left L5 (M54.16). Disc displacement lumbar region (M51.26). Medical necessity for lumbar MRI without contrast (72148) met per policy: radiculopathy with objective motor/reflex findings and no improvement after 6 weeks conservative therapy.
+
+Plan: Lumbar spine MRI without contrast (CPT 72148). Prior authorization requested per payer policy.
+
+Attending: Dr. Lisa Wong, MD, Physical Medicine & Rehabilitation
+Facility: Spine Care Associates
+NPI: 1122334455`,
+  },
+  {
+    id: "spine-moderate-denial",
+    label: "Spine MRI — moderate denial risk (Aetna policy)",
+    content: `Patient: Sandra M., DOB 09/05/1974
+Date of Service: 02/26/2026
+
+Chief Complaint: Low back pain with leg symptoms; MRI lumbar spine requested.
+
+History: Approximately 5 weeks of low back pain with some radiation into the right leg. Patient reports trying ibuprofen and some home stretches. Physical therapy was started 3 weeks ago (2x/week). No prior injections or surgery.
+
+Physical Examination:
+- Lumbar range of motion reduced; tenderness in paraspinal region
+- Straight leg raise: Positive on the right at approximately 50°
+- Motor strength: Right lower extremity 5/5 throughout; no focal weakness documented
+- Sensory: Patient reports occasional tingling in right calf; formal dermatomal testing not fully documented
+- Reflexes: Not clearly documented
+
+Imaging: No prior lumbar imaging noted in chart.
+
+Assessment: Low back pain with radiculopathy (M54.51, M54.16). Requesting lumbar MRI (CPT 72148) for further evaluation.
+
+Plan: Order lumbar MRI without contrast. Will obtain prior auth as required.
+
+Attending: Dr. Robert Hayes, MD
+Facility: Metro Primary Care
+NPI: 5544332211`,
+  },
+  {
     id: "lumbar",
     label: "Lumbar spine / back pain",
     content: `Patient: Michael R., DOB 11/08/1975
@@ -224,38 +280,6 @@ Diagnoses:
 
 Attending: Dr. Sarah Chen, MD, Orthopedic Surgery
 Facility: Metropolitan Orthopedic Surgical Center`,
-  },
-  {
-    id: "cardiac",
-    label: "Cardiac stress test",
-    content: `Patient: Robert M., DOB 08/22/1965
-Date of Service: 02/18/2026
-
-Chief Complaint: Atypical chest discomfort with exertion; risk stratification for CAD.
-
-History: Patient with hypertension and family history of premature CAD. No prior cardiac procedures. Referred for functional assessment after abnormal resting ECG (nonspecific ST changes).
-
-Procedure: Symptom-limited treadmill stress test (Bruce protocol). Achieved 9.2 METs, 85% MPHR. No chest pain. No significant ST depression. BP response normal. Test negative for inducible ischemia.
-
-Impression: Negative stress test. Low intermediate pretest probability. No evidence of inducible ischemia at 85% MPHR.
-
-CPT: 93015 (Stress test, physician supervision only). Diagnosis: R10.9 (Unspecified abdominal pain), Z86.73 (Personal history of CAD). Place of Service: 11 (Office).`,
-  },
-  {
-    id: "preventive",
-    label: "Annual preventive visit",
-    content: `Patient: Maria L., DOB 03/10/1980
-Date of Service: 02/19/2026
-
-Visit: Annual wellness visit, established patient. No acute complaints.
-
-Preventive services: Comprehensive history and physical. Review of medications, allergies, immunizations. Depression screening (PHQ-2 negative). Fall risk screening. Advance care planning discussed; patient has existing advance directive on file.
-
-Vitals: BP 118/72, BMI 24.2. No significant change from prior year.
-
-Assessment: Healthy adult, age-appropriate preventive care completed. No additional workup needed.
-
-Planned: Return in 1 year for next AWV. CPT 99396 (Preventive visit, 40–64). ICD-10 Z00.00 (Encounter for general adult medical examination without abnormal findings).`,
   },
 ];
 
@@ -436,7 +460,10 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
     setDocImageFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const hasClaimInput = note.trim().length > 20 || audioFiles.length > 0;
+  const hasClaimInput =
+    note.trim().length > 0 ||
+    audioFiles.length > 0 ||
+    docImageFiles.length > 0;
   const hasPolicy = policyFiles.length > 0;
   const canSubmit = hasClaimInput && hasPolicy && !loading;
 
@@ -872,7 +899,7 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
         </button>
         {!hasClaimInput && (
           <p className="text-slate-400" style={{ fontSize: "0.75rem" }}>
-            Add claim documentation or attach audio to continue
+            Add a note, documentation, or audio to run the check
           </p>
         )}
         {hasClaimInput && !hasPolicy && (

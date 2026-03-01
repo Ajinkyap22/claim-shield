@@ -86,8 +86,8 @@ export function ClaimSummary({ claimSummary }: ClaimSummaryProps) {
             Diagnoses (ICD-10)
           </p>
           <div className="space-y-1.5">
-            {claimData.diagnoses.map((dx) => (
-              <div key={dx.code} className="flex items-start gap-2">
+            {claimData.diagnoses.map((dx, i) => (
+              <div key={`diagnosis-${i}-${dx.code}`} className="flex items-start gap-2">
                 <span
                   className="shrink-0 rounded px-1.5 py-0.5 font-mono"
                   style={{
@@ -146,8 +146,8 @@ export function ClaimSummary({ claimSummary }: ClaimSummaryProps) {
             Procedures (CPT)
           </p>
           <div className="space-y-1.5">
-            {claimData.procedures.map((px) => (
-              <div key={px.code} className="flex items-start gap-2">
+            {claimData.procedures.map((px, i) => (
+              <div key={`procedure-${i}-${px.code}`} className="flex items-start gap-2">
                 <span
                   className="shrink-0 rounded px-1.5 py-0.5 font-mono"
                   style={{
