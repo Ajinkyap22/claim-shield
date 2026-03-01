@@ -47,7 +47,7 @@ function getAppState(
   return "idle";
 }
 
-export default function ComplianceShieldApp() {
+export default function ClaimShieldApp() {
   const [pollStatus, setPollStatus] = useState<PollStatusResponse | null>(null);
   const mutation = useComplianceCheckMutation({ onStatus: setPollStatus });
   const { mutate, isPending, isSuccess, isError, data, error, reset } =
@@ -367,7 +367,7 @@ export default function ComplianceShieldApp() {
               className="font-display text-[var(--body-text)]"
               style={{ fontSize: "0.8rem", fontWeight: 600 }}
             >
-              Compliance<span className="text-teal-600">Shield</span>
+              Claim<span className="text-teal-600">Shield</span>
             </p>
             <p
               className="text-[var(--body-text-muted)] mt-0.5"

@@ -864,7 +864,7 @@ export function InputForm({ onSubmit, loading }: InputFormProps) {
           ) : (
             <>
               <ShieldCheck className="w-4 h-4" />
-              Run Compliance Check
+              Run Claim Check
             </>
           )}
         </button>

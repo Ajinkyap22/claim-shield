@@ -23,10 +23,14 @@ export interface ScoredCriterion extends PolicyCriterion {
 /**
  * Upserts policy criteria as vectors into Pinecone.
  */
-export async function upsertCriteria(criteria: PolicyCriterion[]): Promise<void> {
+export async function upsertCriteria(
+  criteria: PolicyCriterion[],
+): Promise<void> {
   if (criteria.length === 0) return;
 
-  const texts = criteria.map((c) => buildEmbeddingText(c.requirement, c.raw_text));
+  const texts = criteria.map((c) =>
+    buildEmbeddingText(c.requirement, c.raw_text),
+  );
   const embeddings = await embedTexts(texts);
 
   const index = getIndex();
@@ -66,7 +70,7 @@ export async function searchCriteria(
   queryText: string,
   procedureCategory: string,
   payerId?: string,
-  topK: number = 10
+  topK: number = 10,
 ): Promise<ScoredCriterion[]> {
   const queryEmbedding = await embedQuery(queryText);
   const index = getIndex();
@@ -97,7 +101,10 @@ export async function searchCriteria(
       body_regions: m.body_regions as string[],
       category: m.category as string,
       requirement: m.requirement as string,
-      requirement_type: m.requirement_type as "mandatory" | "recommended" | "conditional",
+      requirement_type: m.requirement_type as
+        | "mandatory"
+        | "recommended"
+        | "conditional",
       conditions: m.conditions as string[],
       exceptions: m.exceptions as string[],
       evidence_requirements: m.evidence_requirements as string[],
@@ -121,7 +128,12 @@ export async function deletePolicyVectors(policyId: string): Promise<void> {
  * Since Pinecone doesn't support aggregation, we maintain a local registry.
  */
 export async function listPolicies(): Promise<
-  { policy_id: string; payer_id: string; payer_name: string; policy_name: string }[]
+  {
+    policy_id: string;
+    payer_id: string;
+    payer_name: string;
+    policy_name: string;
+  }[]
 > {
   return [...policyRegistry.values()];
 }
@@ -129,7 +141,14 @@ export async function listPolicies(): Promise<
 // In-memory registry for policy metadata (populated during ingestion, lost on restart)
 const policyRegistry = new Map<
   string,
-  { policy_id: string; payer_id: string; payer_name: string; policy_name: string; criteria_count: number; ingested_at: string }
+  {
+    policy_id: string;
+    payer_id: string;
+    payer_name: string;
+    policy_name: string;
+    criteria_count: number;
+    ingested_at: string;
+  }
 >();
 
 export function registerPolicy(
@@ -137,7 +156,7 @@ export function registerPolicy(
   payerId: string,
   payerName: string,
   policyName: string,
-  criteriaCount: number
+  criteriaCount: number,
 ): void {
   policyRegistry.set(policyId, {
     policy_id: policyId,

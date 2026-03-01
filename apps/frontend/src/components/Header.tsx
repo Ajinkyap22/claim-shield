@@ -25,7 +25,7 @@ export function Header() {
               className="font-display text-white tracking-tight"
               style={{ fontSize: "1.3rem", fontWeight: 700, letterSpacing: "-0.02em" }}
             >
-              Compliance<span className="text-teal-400">Shield</span>
+              Claim<span className="text-teal-400">Shield</span>
             </span>
             <p
               className="text-slate-400 font-display leading-none"

@@ -277,7 +277,7 @@ export function ResultsPanel({
       <motion.div {...fadeUp(0.38)}>
         <div className="text-center py-4">
           <p className="text-[var(--body-text-muted)]" style={{ fontSize: "0.72rem" }}>
-            ComplianceShield can be embedded in your billing workflow or accessed via{" "}
+            ClaimShield can be embedded in your billing workflow or accessed via{" "}
             <span className="font-mono" style={{ color: "var(--teal-600)" }}>POST /api/v1/claim-check</span>.{" "}
             Results are advisory; always confirm with your billing compliance officer.
           </p>
