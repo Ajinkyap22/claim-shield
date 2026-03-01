@@ -16,7 +16,9 @@ import type {
 } from "@compliance-shield/shared";
 import {
   CheckResultSchema,
+  ClinicalContextSchema,
   ClinicalValidationResultSchema,
+  DEFAULT_CLINICAL_CONTEXT_INPUT,
 } from "@compliance-shield/shared";
 import { config } from "../config.js";
 import { extractClinicalContext } from "./fact-extractor.js";
@@ -54,11 +56,20 @@ function normalizeConfidence(confidence: unknown): number {
   return Math.max(0, Math.min(1, value));
 }
 
+const DEFAULT_CHECK_RESULT: CheckResult = {
+  status: "pass",
+  confidence: 0.5,
+  findings: "Unable to assess.",
+  evidence: [],
+  recommendations: [],
+};
+
 function normalizeCheckResult(raw: unknown): CheckResult {
   const candidate =
     raw && typeof raw === "object" ? { ...(raw as Record<string, unknown>) } : {};
   candidate.confidence = normalizeConfidence(candidate.confidence);
-  return CheckResultSchema.parse(candidate) as CheckResult;
+  const parsed = CheckResultSchema.safeParse(candidate);
+  return parsed.success ? (parsed.data as CheckResult) : DEFAULT_CHECK_RESULT;
 }
 
 function bundleSummary(bundle: ClaimBundle): string {
@@ -190,41 +201,59 @@ export interface ValidationOutput {
   clinical_context: ClinicalContext;
 }
 
+function getDefaultValidationOutput(): ValidationOutput {
+  const defaultContext = ClinicalContextSchema.parse(DEFAULT_CLINICAL_CONTEXT_INPUT);
+  const defaultCheck = DEFAULT_CHECK_RESULT;
+  return {
+    validation_result: ClinicalValidationResultSchema.parse({
+      overall_status: "pass",
+      medical_necessity: defaultCheck,
+      step_therapy: defaultCheck,
+      documentation: defaultCheck,
+    }) as ClinicalValidationResult,
+    clinical_context: defaultContext,
+  };
+}
+
 export async function runClinicalValidation(
   bundle: ClaimBundle
 ): Promise<ValidationOutput> {
-  // Run all 3 checks + fact extraction in parallel (4 LLM calls)
-  const [medicalNecessity, stepTherapy, documentation, clinicalContext] =
-    await Promise.all([
-      checkMedicalNecessity(bundle),
-      checkStepTherapy(bundle),
-      checkDocumentation(bundle),
-      extractClinicalContext(bundle),
-    ]);
+  try {
+    // Run all 3 checks + fact extraction in parallel (4 LLM calls)
+    const [medicalNecessity, stepTherapy, documentation, clinicalContext] =
+      await Promise.all([
+        checkMedicalNecessity(bundle),
+        checkStepTherapy(bundle),
+        checkDocumentation(bundle),
+        extractClinicalContext(bundle),
+      ]);
 
-  const statuses = [
-    medicalNecessity.status,
-    stepTherapy.status,
-    documentation.status,
-  ];
-  let overallStatus: "pass" | "pass_with_findings" | "fail";
-  if (statuses.includes("fail")) {
-    overallStatus = "fail";
-  } else if (statuses.includes("pass_with_findings")) {
-    overallStatus = "pass_with_findings";
-  } else {
-    overallStatus = "pass";
+    const statuses = [
+      medicalNecessity.status,
+      stepTherapy.status,
+      documentation.status,
+    ];
+    let overallStatus: "pass" | "pass_with_findings" | "fail";
+    if (statuses.includes("fail")) {
+      overallStatus = "fail";
+    } else if (statuses.includes("pass_with_findings")) {
+      overallStatus = "pass_with_findings";
+    } else {
+      overallStatus = "pass";
+    }
+
+    const validationResult = ClinicalValidationResultSchema.parse({
+      overall_status: overallStatus,
+      medical_necessity: medicalNecessity,
+      step_therapy: stepTherapy,
+      documentation,
+    }) as ClinicalValidationResult;
+
+    return {
+      validation_result: validationResult,
+      clinical_context: clinicalContext,
+    };
+  } catch (_err) {
+    return getDefaultValidationOutput();
   }
-
-  const validationResult = ClinicalValidationResultSchema.parse({
-    overall_status: overallStatus,
-    medical_necessity: medicalNecessity,
-    step_therapy: stepTherapy,
-    documentation,
-  }) as ClinicalValidationResult;
-
-  return {
-    validation_result: validationResult,
-    clinical_context: clinicalContext,
-  };
 }

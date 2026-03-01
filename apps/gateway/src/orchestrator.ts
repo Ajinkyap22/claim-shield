@@ -4,6 +4,7 @@ import {
   ClinicalValidationResultSchema,
   ClinicalContextSchema,
   PayerScoreBreakdownSchema,
+  DEFAULT_CLINICAL_CONTEXT_INPUT,
 } from "@compliance-shield/shared";
 import type {
   ClaimBundle,
@@ -291,13 +292,13 @@ async function callExtractFile(
     form.append("documentationFiles", blob, f.originalname || "documentation");
   }
 
-  const hasFiles =
+  const hasClinicalInput =
+    (input.clinicalNote?.trim()?.length ?? 0) > 0 ||
     (input.audioFiles?.length ?? 0) > 0 ||
-    (input.policyFiles?.length ?? 0) > 0 ||
     (input.documentationFiles?.length ?? 0) > 0;
-  if (!input.clinicalNote?.trim() && !hasFiles) {
+  if (!hasClinicalInput) {
     throw new Error(
-      "Either clinicalNote or at least one file must be provided",
+      "At least one of clinical note, audio, or documentation must be provided",
     );
   }
 
@@ -442,11 +443,17 @@ async function callValidation(bundle: ClaimBundle): Promise<ValidationOutput> {
   }
 
   const data = (await resp.json()) as Record<string, unknown>;
+  const vrParsed = ClinicalValidationResultSchema.safeParse(
+    data.validation_result,
+  );
+  const ccParsed = ClinicalContextSchema.safeParse(data.clinical_context);
   return {
-    validation_result: ClinicalValidationResultSchema.parse(
-      data.validation_result,
-    ),
-    clinical_context: ClinicalContextSchema.parse(data.clinical_context),
+    validation_result: vrParsed.success
+      ? vrParsed.data
+      : ClinicalValidationResultSchema.parse({}),
+    clinical_context: ccParsed.success
+      ? ccParsed.data
+      : ClinicalContextSchema.parse(DEFAULT_CLINICAL_CONTEXT_INPUT),
   };
 }
 

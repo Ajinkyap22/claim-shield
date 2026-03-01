@@ -5,6 +5,7 @@ import {
   ClaimBundleSchema,
   ClinicalValidationResultSchema,
   ClinicalContextSchema,
+  DEFAULT_CLINICAL_CONTEXT_INPUT,
 } from "@compliance-shield/shared";
 import type {
   ClaimBundle,
@@ -41,8 +42,10 @@ app.post("/score", async (req, res) => {
     }
 
     const bundle = ClaimBundleSchema.parse(claim_bundle) as ClaimBundle;
-    const validation = ClinicalValidationResultSchema.parse(validation_result) as ClinicalValidationResult;
-    const context = ClinicalContextSchema.parse(clinical_context) as ClinicalContext;
+    const validationParsed = ClinicalValidationResultSchema.safeParse(validation_result);
+    const contextParsed = ClinicalContextSchema.safeParse(clinical_context);
+    const validation = (validationParsed.success ? validationParsed.data : ClinicalValidationResultSchema.parse({})) as ClinicalValidationResult;
+    const context = (contextParsed.success ? contextParsed.data : ClinicalContextSchema.parse(DEFAULT_CLINICAL_CONTEXT_INPUT)) as ClinicalContext;
 
     const payerScores = await scoreAllPayers(payers, context, bundle, validation);
 

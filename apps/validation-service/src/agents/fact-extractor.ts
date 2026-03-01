@@ -7,7 +7,10 @@
 
 import OpenAI from "openai";
 import type { ClaimBundle, ClinicalContext } from "@compliance-shield/shared";
-import { ClinicalContextSchema } from "@compliance-shield/shared";
+import {
+  ClinicalContextSchema,
+  DEFAULT_CLINICAL_CONTEXT_INPUT,
+} from "@compliance-shield/shared";
 import { config } from "../config.js";
 
 const openai = new OpenAI({
@@ -100,15 +103,47 @@ export async function extractClinicalContext(
     ],
   });
 
-  const raw = JSON.parse(stripCodeFences(response.choices[0].message.content!));
+  let raw: unknown;
+  try {
+    raw = JSON.parse(stripCodeFences(response.choices[0].message.content!));
+  } catch {
+    return getDefaultClinicalContext();
+  }
+
+  if (!raw || typeof raw !== "object") {
+    return getDefaultClinicalContext();
+  }
+
+  const rawObj = raw as Record<string, unknown>;
 
   // Guard: LLM sometimes returns clinical_indicators.red_flags_present as boolean
-  if (raw?.clinical_indicators && typeof raw.clinical_indicators === "object") {
-    const rfp = raw.clinical_indicators.red_flags_present;
-    if (typeof rfp === "boolean") {
-      raw.clinical_indicators.red_flags_present = [];
+  if (rawObj.clinical_indicators && typeof rawObj.clinical_indicators === "object") {
+    const ci = rawObj.clinical_indicators as Record<string, unknown>;
+    if (typeof ci.red_flags_present === "boolean") {
+      ci.red_flags_present = [];
     }
   }
 
-  return ClinicalContextSchema.parse(raw);
+  // Merge with default so we never pass undefined for any key (Zod then always gets a full object)
+  const toParse: Record<string, unknown> = { ...DEFAULT_CLINICAL_CONTEXT_INPUT };
+  for (const key of Object.keys(DEFAULT_CLINICAL_CONTEXT_INPUT)) {
+    const v = rawObj[key];
+    if (v !== undefined && v !== null) {
+      if (key === "procedure_category" || key === "body_region") {
+        toParse[key] = typeof v === "string" ? v : DEFAULT_CLINICAL_CONTEXT_INPUT[key];
+      } else if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+        toParse[key] = v;
+      }
+    }
+  }
+
+  try {
+    return ClinicalContextSchema.parse(toParse);
+  } catch {
+    return getDefaultClinicalContext();
+  }
+}
+
+function getDefaultClinicalContext(): ClinicalContext {
+  return ClinicalContextSchema.parse(DEFAULT_CLINICAL_CONTEXT_INPUT);
 }
