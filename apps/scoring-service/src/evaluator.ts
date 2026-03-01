@@ -10,20 +10,25 @@ import { completeChat } from "./openrouter-client.js";
 
 const SYSTEM_PROMPT = `You are a healthcare insurance policy analyst. Your job is to evaluate whether a medical claim meets the payer's policy criteria and estimate the denial probability.
 
+IMPORTANT — denial_probability scale (higher number = higher denial risk):
+- 0.0 = certain approval (claim clearly meets policy)
+- 1.0 = certain denial (claim clearly fails policy)
+When in doubt, do NOT default to high values. Well-documented, policy-compliant claims should get LOW denial_probability (0.1-0.35). Use 0.5 only when truly uncertain. Use 0.6-1.0 only when there are significant unmet requirements or clear policy violations.
+
 You are given:
 1. The claim's clinical context (structured facts extracted from clinical documentation)
 2. The claim bundle (patient info, diagnoses, procedures, supporting information)
 3. The clinical validation result (medical necessity, step therapy, documentation checks)
 4. A set of relevant policy criteria retrieved from the payer's coverage policies
 
-For each policy criterion provided, evaluate whether the claim satisfies it. Then produce an overall denial probability.
+For each policy criterion provided, evaluate whether the claim satisfies it. Then produce an overall denial probability that reflects how many criteria are met vs unmet.
 
 Rules:
 - Evaluate EACH criterion independently and produce a rule_id, description, category, passed (boolean), score (0.0 to 1.0 where 1.0 = fully met), weight (importance 0.0 to 1.0), reasoning, and evidence.
 - rule_id should be the criterion_id from the input.
 - score: 1.0 means the criterion is fully satisfied, 0.0 means completely unmet. Use intermediate values for partial compliance.
 - weight: how important this criterion is for the denial decision. Core requirements like medical necessity and step therapy should be 0.2-0.3. Documentation should be 0.15-0.2. Coding specificity should be 0.05-0.1.
-- denial_probability: the overall likelihood the payer would deny this claim, from 0.0 (certain approval) to 1.0 (certain denial). This should reflect the weighted evaluation of all criteria.
+- denial_probability: overall likelihood the payer would DENY this claim. 0.0 = certain approval, 1.0 = certain denial. Calibrate: if most criteria are met → use 0.15-0.35; if mixed → 0.35–0.55; if several important criteria failed → 0.55–0.75; if most criteria failed → 0.75–1.0.
 - risk_level: "low" if denial_probability < 0.35, "medium" if < 0.65, "high" if >= 0.65.
 - recommendations: short, actionable steps to improve the claim; include CPT/ICD-10 codes when relevant. Only for criteria not fully met.
 - summary: 1-2 short, provider-facing sentences. No internal field names or technical paths.
@@ -43,7 +48,6 @@ Display rules (required for reasoning, evidence, recommendations, summary):
 
 Respond with ONLY a raw JSON object matching the PayerScoreBreakdown schema exactly. No markdown, no code fences, no explanation — just valid JSON.`;
 
-
 const PAYER_NAMES: Record<string, string> = {
   user: "Your uploaded policy",
   uhc: "UnitedHealthcare",
@@ -58,20 +62,27 @@ function buildQueryText(context: ClinicalContext, bundle: ClaimBundle): string {
     `Procedure: ${context.procedure_category} (${context.body_region})`,
   ];
 
-  const diag = bundle.conditions.map((c) => `${c.code} ${c.display}`).join(", ");
+  const diag = bundle.conditions
+    .map((c) => `${c.code} ${c.display}`)
+    .join(", ");
   if (diag) parts.push(`Diagnoses: ${diag}`);
 
-  const proc = bundle.procedures.map((p) => `${p.code} ${p.display}`).join(", ");
+  const proc = bundle.procedures
+    .map((p) => `${p.code} ${p.display}`)
+    .join(", ");
   if (proc) parts.push(`Procedures: ${proc}`);
 
-  if (context.clinical_indicators.radiculopathy) parts.push("radiculopathy present");
+  if (context.clinical_indicators.radiculopathy)
+    parts.push("radiculopathy present");
   if (context.conservative_treatment.total_conservative_weeks != null) {
     parts.push(
-      `${context.conservative_treatment.total_conservative_weeks} weeks conservative treatment`
+      `${context.conservative_treatment.total_conservative_weeks} weeks conservative treatment`,
     );
   }
   if (context.neurological_exam.exam_completeness !== "absent") {
-    parts.push(`neurological exam: ${context.neurological_exam.exam_completeness}`);
+    parts.push(
+      `neurological exam: ${context.neurological_exam.exam_completeness}`,
+    );
   }
 
   return parts.join(". ");
@@ -88,7 +99,7 @@ export async function scoreForPayer(
   payerId: string,
   context: ClinicalContext,
   bundle: ClaimBundle,
-  validation: ClinicalValidationResult
+  validation: ClinicalValidationResult,
 ): Promise<PayerScoreBreakdown> {
   const queryText = buildQueryText(context, bundle);
 
@@ -96,7 +107,7 @@ export async function scoreForPayer(
     queryText,
     context.procedure_category,
     payerId,
-    15
+    15,
   );
 
   const payerName = PAYER_NAMES[payerId] ?? payerId;
@@ -141,7 +152,7 @@ export async function scoreForPayer(
       })),
     },
     null,
-    2
+    2,
   );
 
   const rawResponse = await completeChat({
@@ -203,13 +214,13 @@ export async function scoreAllPayers(
   payers: string[],
   context: ClinicalContext,
   bundle: ClaimBundle,
-  validation: ClinicalValidationResult
+  validation: ClinicalValidationResult,
 ): Promise<Record<string, PayerScoreBreakdown>> {
   const entries = await Promise.all(
     payers.map(async (payerId) => {
       const score = await scoreForPayer(payerId, context, bundle, validation);
       return [payerId, score] as const;
-    })
+    }),
   );
 
   return Object.fromEntries(entries);
