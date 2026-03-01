@@ -57,7 +57,6 @@ export default function ClaimShieldApp() {
   const result: ComplianceCheckResponse | null = isSuccess && data
     ? data
     : null;
-  const jobId = isSuccess && data && "jobId" in data ? data.jobId : undefined;
 
   const handleSubmit = (payload: ComplianceCheckPayload) => {
     setPollStatus(null);
@@ -348,7 +347,6 @@ export default function ClaimShieldApp() {
               </div>
               <ResultsPanel
                 result={result}
-                jobId={jobId}
                 onReset={handleReset}
               />
             </motion.section>
