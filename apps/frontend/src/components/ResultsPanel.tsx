@@ -39,17 +39,17 @@ function fadeUp(delay: number = 0) {
 
 const TOP_RECOMMENDATIONS_COPY = 5;
 
-export function ResultsPanel({
-  result = null,
-  onReset,
-}: ResultsPanelProps) {
+export function ResultsPanel({ result = null, onReset }: ResultsPanelProps) {
   const topRef = useRef<HTMLDivElement>(null);
   const [pdfExporting, setPdfExporting] = useState(false);
-  const [copySummaryFeedback, setCopySummaryFeedback] = useState<"idle" | "copied" | "error">("idle");
+  const [copySummaryFeedback, setCopySummaryFeedback] = useState<
+    "idle" | "copied" | "error"
+  >("idle");
   const score = result?.score ?? MOCK_COMPLIANCE_RESPONSE.score;
   const scoreExplanation =
     result?.scoreExplanation ?? MOCK_COMPLIANCE_RESPONSE.scoreExplanation;
-  const recommendations = result?.recommendations ?? MOCK_COMPLIANCE_RESPONSE.recommendations ?? [];
+  const recommendations =
+    result?.recommendations ?? MOCK_COMPLIANCE_RESPONSE.recommendations ?? [];
 
   const buildSummaryText = (): string => {
     const lines: string[] = [
@@ -66,7 +66,9 @@ export function ResultsPanel({
     return lines.join("\n");
   };
 
-  const copySummaryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copySummaryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   const handleCopySummary = async () => {
     if (copySummaryTimeoutRef.current) {
@@ -76,10 +78,16 @@ export function ResultsPanel({
     try {
       await navigator.clipboard.writeText(buildSummaryText());
       setCopySummaryFeedback("copied");
-      copySummaryTimeoutRef.current = setTimeout(() => setCopySummaryFeedback("idle"), 2000);
+      copySummaryTimeoutRef.current = setTimeout(
+        () => setCopySummaryFeedback("idle"),
+        2000,
+      );
     } catch {
       setCopySummaryFeedback("error");
-      copySummaryTimeoutRef.current = setTimeout(() => setCopySummaryFeedback("idle"), 2000);
+      copySummaryTimeoutRef.current = setTimeout(
+        () => setCopySummaryFeedback("idle"),
+        2000,
+      );
     }
   };
 
@@ -141,10 +149,16 @@ export function ResultsPanel({
             <CheckCircle2 className="w-4 h-4 text-teal-600" />
           </div>
           <div>
-            <p className="font-display text-[var(--body-text)]" style={{ fontSize: "0.9rem", fontWeight: 600 }}>
+            <p
+              className="font-display text-[var(--body-text)]"
+              style={{ fontSize: "0.9rem", fontWeight: 600 }}
+            >
               Pre-submit check complete
             </p>
-            <p className="text-[var(--body-text-muted)] flex items-center gap-1" style={{ fontSize: "0.72rem" }}>
+            <p
+              className="text-[var(--body-text-muted)] flex items-center gap-1"
+              style={{ fontSize: "0.72rem" }}
+            >
               <Clock className="w-3 h-3" />
               Analyzed in 2.4 s · BlueCross BlueShield Policy v2026.1
             </p>
@@ -188,7 +202,10 @@ export function ResultsPanel({
       </motion.div>
 
       {/* ── HERO: Score + Claim Summary ── */}
-      <motion.div {...fadeUp(0.08)} className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+      <motion.div
+        {...fadeUp(0.08)}
+        className="grid grid-cols-1 lg:grid-cols-5 gap-4"
+      >
         {/* Score Card */}
         <div
           className="lg:col-span-2 bg-white rounded-2xl border border-slate-200/80 overflow-hidden transition-[box-shadow] duration-300 hover:shadow-[var(--shadow-card-hover)]"
@@ -196,7 +213,10 @@ export function ResultsPanel({
         >
           <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/80 flex items-center gap-2">
             <ShieldAlert className="w-4 h-4 text-orange-500" />
-            <span className="font-display text-[var(--body-text)]" style={{ fontSize: "0.9rem", fontWeight: 600 }}>
+            <span
+              className="font-display text-[var(--body-text)]"
+              style={{ fontSize: "0.9rem", fontWeight: 600 }}
+            >
               Denial Risk Score
             </span>
           </div>
@@ -217,7 +237,7 @@ export function ResultsPanel({
                 {formatCitation(scoreExplanation)}
               </p>
             </div>
-            <div className="mt-4 w-full grid grid-cols-3 gap-2 text-center">
+            {/* <div className="mt-4 w-full grid grid-cols-3 gap-2 text-center">
               {[
                 { label: "Critical", value: "2", color: "#dc2626", bg: "#fee2e2" },
                 { label: "Required", value: "2", color: "#ea580c", bg: "#ffedd5" },
@@ -230,7 +250,7 @@ export function ResultsPanel({
                   </p>
                 </div>
               ))}
-            </div>
+            </div> */}
           </div>
         </div>
 
@@ -244,14 +264,25 @@ export function ResultsPanel({
       <motion.div {...fadeUp(0.18)}>
         <div className="flex items-center gap-3 mb-3">
           <div className="flex-1 h-px bg-slate-200/80" />
-          <span className="text-[var(--body-text-muted)] flex items-center gap-1.5 font-display" style={{ fontSize: "0.72rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+          <span
+            className="text-[var(--body-text-muted)] flex items-center gap-1.5 font-display"
+            style={{
+              fontSize: "0.72rem",
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+            }}
+          >
             <span className="w-2 h-2 rounded-full bg-blue-400" />
             Two-Agent Analysis
             <span className="w-2 h-2 rounded-full bg-amber-400" />
           </span>
           <div className="flex-1 h-px bg-slate-200/80" />
         </div>
-        <DualAgentView clinicianFindings={result?.clinicianFindings} payerPolicyPoints={result?.payerPolicyPoints} />
+        <DualAgentView
+          clinicianFindings={result?.clinicianFindings}
+          payerPolicyPoints={result?.payerPolicyPoints}
+        />
       </motion.div>
 
       {/* ── RECOMMENDATIONS ── */}
@@ -267,10 +298,16 @@ export function ResultsPanel({
       {/* Footer note */}
       <motion.div {...fadeUp(0.38)}>
         <div className="text-center py-4">
-          <p className="text-[var(--body-text-muted)]" style={{ fontSize: "0.72rem" }}>
+          <p
+            className="text-[var(--body-text-muted)]"
+            style={{ fontSize: "0.72rem" }}
+          >
             ClaimShield can be embedded in your billing workflow or accessed via{" "}
-            <span className="font-mono" style={{ color: "var(--teal-600)" }}>POST /api/v1/claim-check</span>.{" "}
-            Results are advisory; always confirm with your billing compliance officer.
+            <span className="font-mono" style={{ color: "var(--teal-600)" }}>
+              POST /api/v1/claim-check
+            </span>
+            . Results are advisory; always confirm with your billing compliance
+            officer.
           </p>
         </div>
       </motion.div>
