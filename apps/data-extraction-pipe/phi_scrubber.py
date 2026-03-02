@@ -1,6 +1,10 @@
 """
 PHI Scrubber: preprocessing layer that de-identifies clinical notes.
 Replaces PHI with placeholders and returns a mapping for reattachment (e.g. from DB).
+
+Scrubbed categories:
+  Patient name, DOB, NPI, Facility, Attending name, Insurer,
+  Phone numbers, Email addresses, SSNs, Dates (service + standalone)
 """
 import re
 from dataclasses import dataclass, field
@@ -50,6 +54,7 @@ DOB = "[DOB]"
 PROVIDER_ID = "[PROVIDER_ID]"
 PROVIDER_NAME = "[PROVIDER_NAME]"
 FACILITY = "[FACILITY]"
+INSURER = "[INSURER]"
 
 # Relative date tokens
 SERVICE_DATE = "[SERVICE_DATE]"
@@ -118,16 +123,50 @@ def scrub_phi(raw_text: str) -> tuple[str, PHIMap]:
             + text[attending_match.end(1) :]
         )
 
-    # ---- 6. Insurer / Payer ----
+    # ---- 6. Insurer / Payer — extract AND replace in text ----
     insurer_match = re.search(
-        r"(?:Insurer|Insurance|Payer|Payor)[:\s]+(.+?)(?=\s*\n|\s*$)",
+        r"((?:Insurer|Insurance|Payer|Payor)[:\s]+)(.+?)(?=\s*\n|\s*$)",
         text,
         re.MULTILINE | re.IGNORECASE,
     )
     if insurer_match:
-        phi.insurer = insurer_match.group(1).strip()
+        phi.insurer = insurer_match.group(2).strip()
+        text = (
+            text[: insurer_match.start(2)]
+            + INSURER
+            + text[insurer_match.end(2) :]
+        )
 
-    # ---- 7. Exact dates → relative tokens ----
+    # ---- 7. Phone numbers (US formats: (555) 123-4567 / 555-123-4567 / 5551234567) ----
+    text = re.sub(
+        r"\b\(?\d{3}\)?[\s\-\.]\d{3}[\s\-\.]\d{4}\b",
+        "[PHONE]",
+        text,
+    )
+
+    # ---- 8. Email addresses ----
+    text = re.sub(
+        r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}",
+        "[EMAIL]",
+        text,
+    )
+
+    # ---- 9. Social Security Numbers (SSN: 123-45-6789 or 123 45 6789) ----
+    text = re.sub(
+        r"\b\d{3}[-\s]\d{2}[-\s]\d{4}\b",
+        "[SSN]",
+        text,
+    )
+
+    # ---- 10. Medical Record Numbers (MRN: ABC-12345 or MRN #12345) ----
+    text = re.sub(
+        r"(?:MRN|Medical Record(?:\s+Number)?)[:\s#]+([A-Z0-9\-]+)",
+        "MRN: [MRN]",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # ---- 11. Exact dates → relative tokens ----
     dos_match = re.search(
         r"Date of Service[:\s]+(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})",
         text,

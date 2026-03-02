@@ -160,6 +160,8 @@ export async function runPipeline(input: PipelineInput): Promise<void> {
       policyIngestResults.length > 0
         ? [...new Set(policyIngestResults.map((p) => p.payer_id))]
         : [];
+    // Enrich procedure_category from CPT codes when fact-extractor returns "other"
+    const enrichedContext = enrichClinicalContext(clinical_context, bundle);
     advanceStage(
       pipelineId,
       PipelineStage.SCORING,
@@ -168,7 +170,7 @@ export async function runPipeline(input: PipelineInput): Promise<void> {
     const payerScores = await callScoring(
       bundle,
       validation_result,
-      clinical_context,
+      enrichedContext,
       payersForScoring,
     );
     completeStage(
@@ -327,10 +329,13 @@ interface FhirBundleEntry {
   };
 }
 
-/** Convert FHIR R4 Bundle from data-extraction-pipe to ClaimBundle for validation/scoring. */
+/** Convert FHIR R4 Bundle from data-extraction-pipe to ClaimBundle for validation/scoring.
+ * rawText is the original clinical note — passed into supporting_info so the fact-extractor
+ * LLM can parse exam findings, treatment history, duration, and imaging from real text
+ * instead of receiving an empty supporting_info object. */
 function fhirBundleToClaimBundle(fhir: {
   entry?: FhirBundleEntry[];
-}): ClaimBundle {
+}, rawText?: string): ClaimBundle {
   const entries = fhir.entry ?? [];
   const patientRes = entries.find(
     (e) => e.resource?.resourceType === "Patient",
@@ -391,13 +396,24 @@ function fhirBundleToClaimBundle(fhir: {
     service_date: claimRes?.created ?? null,
   };
 
+  // Populate supporting_info from the raw clinical note so the downstream
+  // fact-extractor and validation LLMs receive the full clinical context
+  // (exam findings, treatment history, imaging, etc.) instead of nulls.
+  const note = rawText?.trim() ?? "";
+  const supporting_info = note
+    ? {
+        conservative_treatment: note.slice(0, 2000),
+        physical_exam_findings: note.slice(0, 2000),
+      }
+    : {};
+
   return ClaimBundleSchema.parse({
     patient,
     conditions,
     procedures,
     medications: [],
     claim,
-    supporting_info: {},
+    supporting_info,
   });
 }
 
@@ -416,7 +432,7 @@ async function callProcess(rawText: string): Promise<ClaimBundle> {
   const fhir = data.fhir_bundle && typeof data.fhir_bundle === "object"
     ? { entry: data.fhir_bundle.entry ?? [] }
     : { entry: [] };
-  return fhirBundleToClaimBundle(fhir);
+  return fhirBundleToClaimBundle(fhir, rawText);
 }
 
 async function callValidation(bundle: ClaimBundle): Promise<ValidationOutput> {
@@ -455,6 +471,46 @@ async function callValidation(bundle: ClaimBundle): Promise<ValidationOutput> {
       ? ccParsed.data
       : ClinicalContextSchema.parse(DEFAULT_CLINICAL_CONTEXT_INPUT),
   };
+}
+
+/** Maps a CPT code to the procedure_category value used by Pinecone metadata filters. */
+function cptToProcedureCategory(cpt: string): string | null {
+  // MRI spine (lumbar, cervical, thoracic — with and without contrast)
+  if (/^7214[1-9]$|^72156$|^72157$|^72158$/.test(cpt)) return "mri_spine"; // cervical/thoracic MRI
+  if (/^72148$|^72149$/.test(cpt)) return "mri_spine"; // lumbar MRI
+  // CT spine
+  if (/^7212[5-7]$|^7212[8-9]$|^7213[0-3]$/.test(cpt)) return "ct_spine";
+  // MRI brain
+  if (/^7055[0-3]$|^7054[0-3]$/.test(cpt)) return "mri_brain";
+  // MRI knee
+  if (/^7372[1-3]$/.test(cpt)) return "mri_knee";
+  // Physical therapy
+  if (/^971[0-9][0-9]$|^97[02-9][0-9][0-9]$/.test(cpt)) return "physical_therapy";
+  // Spine injections
+  if (/^6448[0-9]$|^6232[0-9]$|^6431[0-9]$/.test(cpt)) return "injection_spine";
+  // Spine surgery
+  if (/^2260[0-9]$|^2261[0-9]$|^6300[0-9]$/.test(cpt)) return "surgery_spine";
+  // Knee arthroplasty and knee arthroscopy
+  if (/^2744[0-9]$|^2987[0-9]$|^2988[0-9]$/.test(cpt)) return "surgery_knee";
+  // Hip arthroplasty
+  if (/^2723[0-9]$|^2724[0-9]$/.test(cpt)) return "surgery_hip";
+  return null;
+}
+
+/** Override clinical_context.procedure_category when the fact-extractor returns "other"
+ * by inferring the category from CPT codes in the claim bundle. */
+function enrichClinicalContext(
+  context: import("@compliance-shield/shared").ClinicalContext,
+  bundle: import("@compliance-shield/shared").ClaimBundle,
+): import("@compliance-shield/shared").ClinicalContext {
+  if (context.procedure_category !== "other") return context;
+  for (const proc of bundle.procedures) {
+    const category = cptToProcedureCategory(proc.code);
+    if (category) {
+      return { ...context, procedure_category: category };
+    }
+  }
+  return context;
 }
 
 /** Call scoring service for a given set of payers (used by main pipeline and by payer-comparison endpoint). */

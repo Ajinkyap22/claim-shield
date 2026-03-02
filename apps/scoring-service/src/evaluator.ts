@@ -112,17 +112,29 @@ export async function scoreForPayer(
 
   const payerName = PAYER_NAMES[payerId] ?? payerId;
 
-  if (criteria.length === 0) {
+  // Require a minimum average similarity — low scores mean the uploaded policy
+  // doesn't match this procedure (e.g. uploading a back pain policy for a knee surgery claim).
+  const MIN_AVG_SIMILARITY = 0.35;
+  const avgSimilarity =
+    criteria.length > 0
+      ? criteria.reduce((s, c) => s + c.similarity_score, 0) / criteria.length
+      : 0;
+  const policyMismatch = criteria.length > 0 && avgSimilarity < MIN_AVG_SIMILARITY;
+
+  if (criteria.length === 0 || policyMismatch) {
+    const reason = policyMismatch
+      ? `The uploaded policy does not appear to cover this procedure (average relevance score: ${avgSimilarity.toFixed(2)}). Upload the correct coverage policy to get accurate scoring.`
+      : `No specific policy criteria found for ${payerName}. Upload the payer's coverage policy to get accurate scoring.`;
     return {
       payer_id: payerId,
       payer_name: payerName,
-      denial_probability: 0.5,
-      risk_level: "medium",
+      denial_probability: 1.0,
+      risk_level: "high",
       rules_evaluated: [],
-      recommendations: [
-        `No specific policy criteria found for ${payerName}. Upload the payer's coverage policy to get accurate scoring.`,
-      ],
-      summary: `No policy criteria available for ${payerName}. Unable to provide specific denial assessment.`,
+      recommendations: [reason],
+      summary: policyMismatch
+        ? `Policy mismatch detected for ${payerName}: the uploaded policy does not apply to this procedure type. Upload the correct policy for accurate results.`
+        : `No policy criteria available for ${payerName}. Unable to provide specific denial assessment.`,
     };
   }
 
